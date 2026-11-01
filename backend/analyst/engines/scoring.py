@@ -162,7 +162,8 @@ def risk_score(r: dict) -> dict:
 
 
 def compute(r: dict, settings: dict, final: bool = False) -> dict:
-    weights = settings.get("weights", {})
+    from ..config import active_weights
+    weights = active_weights(settings)
     th = dict(settings.get("thresholds", {}))
     # Niveau de risque accepté : ajuste uniquement le risque maximal toléré pour un BUY SETUP.
     th["max_risk_buy"] = {"prudent": 3.5, "normal": th.get("max_risk_buy", 5.0), "agressif": 6.5}.get(
@@ -214,6 +215,7 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
         "positives": list(dict.fromkeys(pos))[:5], "negatives": list(dict.fromkeys(neg))[:5],
         "explanation": "Moyenne pondérée : " + " ; ".join(explanation) +
                        (f". Non disponibles (exclues, confiance réduite) : {', '.join(missing_cats)}." if missing_cats else "."),
+        "trading_mode": settings.get("trading_mode", "standard"),
         "disclaimer": "Évaluation du potentiel selon les indicateurs disponibles. Ce n'est ni une probabilité ni un "
                       "conseil financier ; aucun ordre n'est passé.",
     }

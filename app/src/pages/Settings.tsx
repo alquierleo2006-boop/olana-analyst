@@ -44,11 +44,35 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
     setMsg(err ? `Enregistré, mais raccourci refusé : ${err}` : "Paramètres enregistrés. Une modification des pondérations crée une nouvelle version du modèle.");
   };
   const inp = "rounded-md border border-line bg-panel2 px-2 py-1 text-[12px] outline-none focus:border-info/60";
-  const totalW = WEIGHTS.reduce((a, [k]) => a + (Number(s.weights[k]) || 0), 0);
+  const mw = s.trading_mode !== "standard" && s.mode_weights?.[s.trading_mode];
+  const W = mw || s.weights;
+  const setW = (k: string, val: number) => mw ? up({ mode_weights: { ...s.mode_weights, [s.trading_mode]: { ...mw, [k]: val } } }) : up({ weights: { ...s.weights, [k]: val } });
+  const totalW = WEIGHTS.reduce((a, [k]) => a + (Number(W[k]) || 0), 0);
   return (
     <div className="space-y-2.5 p-3">
       <div className="flex items-center justify-between"><Button onClick={back}>← Accueil</Button><h2 className="text-[13px] font-bold">PARAMÈTRES</h2><Button kind="primary" onClick={save}>Enregistrer</Button></div>
       {msg && <div className="text-[12px] text-info">{msg}</div>}
+      <Card title="Style de trading">
+        <div className="grid grid-cols-3 gap-1.5">
+          {[["scalp", "SCALP", "minutes : momentum + sécurité, suivi live"], ["standard", "STANDARD", "heures : équilibré"], ["hold", "HOLD", "jours : crédibilité, holders, narrative"]].map(([k, l, d]) => (
+            <button key={k} onClick={() => up({ trading_mode: k })} className={`rounded-md border p-2 text-left ${s.trading_mode === k ? "border-info bg-info/10" : "border-line hover:bg-panel2"}`}>
+              <div className="text-[12px] font-bold">{l}</div><div className="text-[10px] text-muted">{d}</div>
+            </button>
+          ))}
+        </div>
+        {s.trading_mode === "scalp" && (
+          <div className="mt-2">
+            <Chk label="Démarrer le suivi live automatiquement après chaque analyse" v={s.scalp.auto_watch} set={(x) => up({ scalp: { ...s.scalp, auto_watch: x } })} />
+            <F k="Rafraîchissement live (secondes)"><Num v={s.scalp.interval_s} step={0.5} set={(x) => up({ scalp: { ...s.scalp, interval_s: Math.max(1.5, x) } })} /></F>
+            <F k="Alerte de retournement (% sous le plus haut)"><Num v={s.scalp.reversal_pct} step={1} set={(x) => up({ scalp: { ...s.scalp, reversal_pct: x } })} /></F>
+            <F k="Alerte d'accélération (% en 1 min)"><Num v={s.scalp.pump_alert_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, pump_alert_pct: x } })} /></F>
+            <F k="Objectif par défaut (× market cap d'entrée)"><Num v={s.scalp.target_multiple} step={0.25} set={(x) => up({ scalp: { ...s.scalp, target_multiple: x } })} /></F>
+            <F k="Stop par défaut (% sous la market cap d'entrée)"><Num v={s.scalp.stop_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, stop_pct: x } })} /></F>
+            <F k="Durée max du suivi (minutes)"><Num v={s.scalp.max_minutes} step={10} set={(x) => up({ scalp: { ...s.scalp, max_minutes: x } })} /></F>
+            <div className="text-[11px] text-muted">Avec le RPC public, garde au moins 3 s ; avec une clé Helius gratuite, 2 s conviennent.</div>
+          </div>
+        )}
+      </Card>
       <Card title="Fenêtre et raccourci">
         <F k="Raccourci global"><input className={inp + " w-56 font-mono"} value={s.shortcut} onChange={(e) => up({ shortcut: e.target.value })} /></F>
         <div className="mb-1 text-[11px] text-muted">Format : CommandOrControl+Shift+Space, Alt+Shift+A… Choisis une combinaison non utilisée par ton terminal de trading. Le presse-papiers n'est lu qu'au moment où tu presses le raccourci.</div>
@@ -84,9 +108,9 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
         </>}
         <div className="text-[11px] text-muted">L'IA rédige la conclusion et extrait les affirmations à vérifier. Elle ne calcule jamais le score et reçoit les contenus externes comme données non fiables.</div>
       </Card>
-      <Card title={<>Pondérations du score {totalW !== 100 && <span className="text-warn">(total {totalW}% — normalisé automatiquement)</span>}</>}>
+      <Card title={<>Pondérations du mode {String(s.trading_mode).toUpperCase()} {totalW !== 100 && <span className="text-warn">(total {totalW}% — normalisé automatiquement)</span>}</>}>
         {WEIGHTS.map(([k, label]) => (
-          <F key={k} k={label}><input type="range" min={0} max={50} value={s.weights[k]} onChange={(e) => up({ weights: { ...s.weights, [k]: Number(e.target.value) } })} /><span className="num w-10 text-right">{s.weights[k]}%</span></F>
+          <F key={k} k={label}><input type="range" min={0} max={60} value={W[k]} onChange={(e) => setW(k, Number(e.target.value))} /><span className="num w-10 text-right">{W[k]}%</span></F>
         ))}
       </Card>
       <Card title="Seuils et risque">
@@ -115,7 +139,7 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
         <Chk label="Activer les notifications" v={s.notifications.enabled} set={(x) => up({ notifications: { ...s.notifications, enabled: x } })} />
         <F k="Alerte si score ≥"><Num v={s.notifications.score_above} set={(x) => up({ notifications: { ...s.notifications, score_above: x } })} /></F>
         <F k="Alerte si le score varie de ≥"><Num v={s.notifications.score_change} set={(x) => up({ notifications: { ...s.notifications, score_change: x } })} /></F>
-        {[["critical_risk", "Risque critique"], ["smart_money", "Plusieurs wallets suivis sur un token"], ["narrative_acceleration", "Narrative en accélération"], ["claim_confirmed", "Information confirmée"], ["telegram", "Envoyer aussi sur Telegram"]].map(([k, l]) => (
+        {[["critical_risk", "Risque critique"], ["smart_money", "Plusieurs wallets suivis sur un token"], ["narrative_acceleration", "Narrative en accélération"], ["claim_confirmed", "Information confirmée"], ["scalp_alert", "Alertes du suivi live (scalp)"], ["telegram", "Envoyer aussi sur Telegram"]].map(([k, l]) => (
           <Chk key={k} label={l} v={s.notifications[k] !== false} set={(x) => up({ notifications: { ...s.notifications, [k]: x } })} />))}
       </Card>
       <div className="pb-2 text-center text-[11px] text-muted">Logiciel en lecture seule : aucune clé privée de wallet, aucune signature, aucun achat.</div>

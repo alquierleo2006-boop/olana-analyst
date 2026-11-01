@@ -17,6 +17,7 @@ LEVEL2 = ["developer", "social", "clusters", "narrative", "smart_money"]
 LEVEL3 = ["project", "factcheck"]
 TIMEOUTS = {1: 15, 2: 30, 3: 35}
 FIRST_RESULT_TARGET_S = {"memecoin": 5, "projet": 15, "hybride": 15}
+SCALP_FIRST_RESULT_S = 3
 
 
 class Analysis:
@@ -34,8 +35,8 @@ class Analysis:
 
 
 class Analyzer:
-    def __init__(self, svc, narratives, notifier) -> None:
-        self.svc, self.narratives, self.notifier = svc, narratives, notifier
+    def __init__(self, svc, narratives, notifier, live=None) -> None:
+        self.svc, self.narratives, self.notifier, self.watcher = svc, narratives, notifier, live
         self.live: dict[int, Analysis] = {}
 
     def start(self, mint: str) -> Analysis:
@@ -43,8 +44,16 @@ class Analyzer:
                                   (mint, time.time(), "en cours"))
         an = Analysis(aid, mint)
         self.live[aid] = an
-        asyncio.create_task(self._run(an))
+        asyncio.create_task(self._run_safe(an))
         return an
+
+    async def _run_safe(self, an: Analysis) -> None:
+        try:
+            await self._run(an)
+        except Exception as exc:  # garde-fou : une analyse ne reste jamais bloquée « en cours »
+            traceback.print_exc()
+            if not an.done.is_set():
+                self._fail(an, f"Erreur interne pendant l'analyse : {type(exc).__name__}: {exc}", "erreur")
 
     def _modules(self, ctx: Ctx) -> dict:
         return {
@@ -96,7 +105,8 @@ class Analyzer:
                 first_sent.set()
 
         async def deadline():
-            await asyncio.sleep(FIRST_RESULT_TARGET_S["memecoin"])
+            scalp = settings.get("trading_mode") == "scalp"
+            await asyncio.sleep(SCALP_FIRST_RESULT_S if scalp else FIRST_RESULT_TARGET_S["memecoin"])
             if not first_sent.is_set():
                 self._first_result(an, t0, partial=True)
                 first_sent.set()
@@ -118,7 +128,12 @@ class Analyzer:
         r["incomplete_modules"] = failed
         r["provisional"] = False
         r["finished_at"] = time.time()
-        r["model_version_id"] = self.svc.db.current_model_version(settings["weights"], settings["thresholds"])
+        from .config import active_weights
+        r["model_version_id"] = self.svc.db.current_model_version(
+            {"mode": settings.get("trading_mode"), **active_weights(settings)}, settings["thresholds"])
+        if self.watcher and an.mint in self.watcher.watches:
+            from .engines.live import watch_info_from_result
+            self.watcher.watches[an.mint].info.update({k: v for k, v in watch_info_from_result(r).items() if v})
         self._save(an)
         an.publish("complete", r)
         an.done.set()
@@ -129,6 +144,23 @@ class Analyzer:
         ms = int((time.monotonic() - t0) * 1000)
         an.result["timing"] = {"first_result_ms": ms, "first_result_partial": partial}
         an.publish("first_result", {"ms": ms, "partial": partial, "scores": an.result.get("scores")})
+        self._maybe_watch(an)
+
+    def _maybe_watch(self, an: Analysis) -> None:
+        """Mode Scalp : le suivi en direct démarre dès la première fiche, sans attendre la fin de l'analyse."""
+        s = self.svc.settings.all()
+        if not self.watcher or s.get("trading_mode") != "scalp" or not (s.get("scalp") or {}).get("auto_watch", True):
+            return
+        from .engines.live import watch_info_from_result
+        r = an.result
+        mcap = ((r.get("market") or {}).get("mcap") or {}).get("v")
+        if not mcap:
+            return
+        try:
+            w = self.watcher.start(an.mint, watch_info_from_result(r), None)  # objectif/stop fixés au 1er relevé live
+            r["live_watch"] = {"active": True, "targets": w.targets}
+        except Exception as exc:
+            r["live_watch"] = {"active": False, "error": str(exc)[:200]}
 
     async def _ai_summary(self, r: dict) -> None:
         sc = r["scores"]

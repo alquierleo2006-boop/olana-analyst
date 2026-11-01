@@ -20,6 +20,7 @@ from . import __version__
 from .config import SECRET_NAMES, Secrets, Settings, data_dir
 from .db import DB
 from .engines.context import Services
+from .engines.live import LiveWatcher, curve_address
 from .engines.narratives import NarrativeEngine
 from .engines.smartmoney import evaluate_wallet, validate_wallet
 from .engines.tracker import Tracker, backtest_report
@@ -44,6 +45,11 @@ class AnalyzeIn(BaseModel):
 class WalletIn(BaseModel):
     address: str = Field(..., max_length=64)
     label: str | None = Field(None, max_length=60)
+
+
+class LiveIn(BaseModel):
+    above: float | None = None
+    below: float | None = None
 
 
 class SecretIn(BaseModel):
@@ -72,11 +78,13 @@ class State:
             self.narratives.dex = self.svc.dex
             self.analyzer.svc = self.svc
             self.tracker.svc = self.svc
+            self.live.svc = self.svc
         else:
             self.narratives = NarrativeEngine(h, self.svc.news, self.svc.dex, self.db, self.settings,
                                               notify=lambda k, d: self.notifier.emit(
                                                   k, d, f"Narrative en accélération : {d.get('name')}", d.get("state", "")))
-            self.analyzer = Analyzer(self.svc, self.narratives, self.notifier)
+            self.live = LiveWatcher(self.svc, self.notifier)
+            self.analyzer = Analyzer(self.svc, self.narratives, self.notifier, self.live)
             self.tracker = Tracker(self.svc)
         for name in ("helius",):
             if not self.secrets.get("helius_api_key"):
@@ -115,6 +123,7 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
     async def health():
         s = st.settings.all()
         return {"version": __version__, "time": time.time(), "read_only": True,
+                "trading_mode": s.get("trading_mode"), "live_watches": len([w for w in st.live.watches.values() if not w.stopped]),
                 "llm": {"available": st.svc.llm.available, "provider": s["llm"]["provider"]},
                 "helius": bool(st.secrets.get("helius_api_key")),
                 "narrative_engine": st.narratives.status, "tracker": st.tracker.status,
@@ -275,7 +284,8 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
             raise HTTPException(400, f"paramètres inconnus : {bad}")
         new = st.settings.update(patch)
         st.build()
-        st.db.current_model_version(new["weights"], new["thresholds"])
+        from .config import active_weights
+        st.db.current_model_version({"mode": new.get("trading_mode"), **active_weights(new)}, new["thresholds"])
         return {"settings": new}
 
     @app.put("/api/secrets/{name}", dependencies=A)
@@ -285,6 +295,58 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
         where = st.secrets.set(name, (body.value or "").strip() or None)
         st.build()
         return {"ok": True, "stored_in": where}
+
+    # ---------------- suivi en direct (mode Scalp)
+    @app.get("/api/live", dependencies=A)
+    async def live_list():
+        return st.live.list()
+
+    @app.post("/api/live/{mint}", dependencies=A)
+    async def live_start(mint: str, body: LiveIn):
+        if not is_valid_mint_format(mint):
+            raise HTTPException(400, "adresse invalide")
+        w = st.live.watches.get(mint)
+        if w and not w.stopped:
+            w.targets.update({"above": body.above, "below": body.below})
+            w.fired = {f for f in w.fired if not f.startswith(("TARGET_UP", "STOP"))}
+            return st.live.snapshot(w)
+        row = st.db.one("SELECT result_json FROM token_analyses WHERE mint=? AND result_json IS NOT NULL "
+                        "ORDER BY id DESC LIMIT 1", (mint,))
+        from .engines.live import watch_info_from_result
+        info = watch_info_from_result(json.loads(row["result_json"])) if row else \
+            {"curve_address": curve_address(mint) if mint.endswith("pump") else None}
+        w = st.live.start(mint, info, {"above": body.above, "below": body.below})
+        return st.live.snapshot(w)
+
+    @app.delete("/api/live/{mint}", dependencies=A)
+    async def live_stop(mint: str):
+        st.live.stop(mint)
+        return {"ok": True}
+
+    @app.websocket("/ws/live/{mint}")
+    async def ws_live(ws: WebSocket, mint: str):
+        if not ws_ok(ws):
+            await ws.close(code=4401)
+            return
+        await ws.accept()
+        w = st.live.watches.get(mint)
+        if not w:
+            await ws.send_json({"type": "stopped", "data": {"mint": mint}})
+            await ws.close()
+            return
+        q: asyncio.Queue = asyncio.Queue(maxsize=200)
+        w.subscribers.add(q)
+        try:
+            await ws.send_text(json.dumps({"type": "tick", "data": st.live.snapshot(w)}, default=str))
+            while True:
+                ev = await q.get()
+                await ws.send_text(json.dumps(ev, default=str))
+                if ev["type"] == "stopped":
+                    break
+        except WebSocketDisconnect:
+            pass
+        finally:
+            w.subscribers.discard(q)
 
     @app.get("/api/notifications", dependencies=A)
     async def notifications():

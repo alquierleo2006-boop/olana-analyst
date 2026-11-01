@@ -54,6 +54,21 @@ Les clés sont stockées dans le **Gestionnaire d'identification Windows** (chif
 Pages : Historique (filtres + comparaison), Narratives mondiales (top 10), Smart money (wallets suivis),
 Performance (backtesting), Paramètres.
 
+## Modes de trading (⚙ Paramètres → Style de trading)
+
+| Mode | Horizon | Pondérations (on-chain / momentum / narrative / social / crédibilité / smart money) |
+|---|---|---|
+| **SCALP** (défaut) | minutes | 35 / 40 / 10 / 10 / 0 / 5 |
+| STANDARD | heures | 25 / 20 / 25 / 20 / 10 / 0 |
+| HOLD | jours | 25 / 10 / 20 / 20 / 25 / 0 |
+
+**Suivi live (mode Scalp)** : dès la première fiche, la market cap est relue toutes les ~3 s
+(directement sur la bonding curve Pump.fun, sinon DexScreener) avec variations 30 s / 1 min / 5 min, flux net de SOL
+(achats − ventes), plus haut et repli depuis le plus haut, progression de la curve. Alertes (notification Windows) :
+objectif atteint, stop touché, retournement (−15 % sous le plus haut après une montée), accélération (+25 % en 1 min),
+vente du développeur, chute de liquidité, migration imminente. Objectif et stop par défaut : ×2 et −30 % de la première
+valeur live, modifiables. Jusqu'à 5 tokens suivis en même temps. **Aucun ordre n'est passé.**
+
 ## Ce que fait chaque module
 
 | Module | Données | Source gratuite |
@@ -96,7 +111,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 16 tests : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 20 tests : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

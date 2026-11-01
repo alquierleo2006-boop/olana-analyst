@@ -31,6 +31,7 @@ export default function Home({ onAnalyze, go, health, input, setInput, error, se
         <div>
           <div className="text-[15px] font-bold leading-tight">Solana AI Desktop Analyst</div>
           <div className="text-[11px] text-muted">Analyse à la demande · lecture seule · aucun achat automatique</div>
+          {health?.trading_mode && <div className="mt-0.5"><Badge tone="info" icon={false}>Mode {health.trading_mode === "scalp" ? "SCALP" : health.trading_mode === "hold" ? "HOLD" : "STANDARD"}</Badge></div>}
         </div>
       </div>
 

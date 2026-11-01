@@ -35,6 +35,14 @@ DEFAULT_SETTINGS: dict = {
     "rpc_url": "https://api.mainnet-beta.solana.com",
     "llm": {"provider": "none", "base_url": "http://localhost:11434/v1", "model": "llama3.1:8b"},
     "weights": {"onchain": 25, "momentum": 20, "narrative": 25, "social": 20, "credibility": 10, "smart_money": 0},
+    # Style de trading : chaque mode a ses propres pondérations (la sécurité garde toujours un poids fort).
+    "trading_mode": "scalp",  # scalp | standard | hold
+    "mode_weights": {
+        "scalp": {"onchain": 35, "momentum": 40, "narrative": 10, "social": 10, "credibility": 0, "smart_money": 5},
+        "hold": {"onchain": 25, "momentum": 10, "narrative": 20, "social": 20, "credibility": 25, "smart_money": 0},
+    },
+    "scalp": {"auto_watch": True, "interval_s": 3, "max_minutes": 60, "reversal_pct": 15, "pump_alert_pct": 25,
+              "target_multiple": 2.0, "stop_pct": 30},
     "thresholds": {"buy_setup_min": 7.0, "avoid_below": 4.0, "min_confidence_buy": 0.6,
                    "min_confidence": 0.35, "max_risk_buy": 5.0},
     "rise_definition_pct": 20.0,
@@ -114,6 +122,13 @@ class Secrets:
 
     def status(self) -> dict[str, bool]:
         return {n: bool(self.get(n)) for n in SECRET_NAMES}
+
+
+def active_weights(settings: dict) -> dict:
+    mode = settings.get("trading_mode", "standard")
+    if mode in (settings.get("mode_weights") or {}):
+        return settings["mode_weights"][mode]
+    return settings.get("weights", {})
 
 
 class Settings:

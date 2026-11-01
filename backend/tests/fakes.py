@@ -25,8 +25,8 @@ MD_PDA = find_pda([b"metadata", pubkey_bytes(METAPLEX_PROGRAM), pubkey_bytes(MIN
 POOL_OWNER = CURVE  # la curve (PDA) détient des tokens
 
 
-def curve_bytes(complete=True):
-    b = bytearray(8) + struct.pack("<QQQQQ", 1_073_000_000 * 10**6, 30 * 10**9, 0, 85 * 10**9, 10**15)
+def curve_bytes(complete=True, vsol=30 * 10**9, rsol=85 * 10**9, rtok=0):
+    b = bytearray(8) + struct.pack("<QQQQQ", 1_073_000_000 * 10**6, vsol, rtok, rsol, 10**15)
     b += bytes([1 if complete else 0]) + pubkey_bytes(CREATOR)
     return bytes(b)
 
@@ -51,6 +51,8 @@ def token_acc(owner, amount):
 class Fake:
     def __init__(self, **opts):
         self.opts = opts
+        self.curve_i = 0
+        self.dev_balance = 5 * 10**12
         self.calls: list[str] = []
 
     def rpc(self, method, params):
@@ -64,7 +66,14 @@ class Fake:
                     "type": "mint", "info": {"decimals": 6, "supply": str(10**15),
                                              "mintAuthority": o.get("mint_auth"), "freezeAuthority": None}}}}}
             if addr == CURVE:
-                return {"value": {"owner": PUMPFUN_PROGRAM, "data": [base64.b64encode(curve_bytes()).decode(), "base64"]}}
+                if o.get("curve_seq"):  # curve active dont les réserves évoluent à chaque lecture
+                    i = min(self.curve_i, len(o["curve_seq"]) - 1)
+                    self.curve_i += 1
+                    vsol = o["curve_seq"][i]
+                    data = curve_bytes(False, vsol=int(vsol * 10**9), rsol=int((vsol - 30) * 10**9), rtok=600_000_000 * 10**6)
+                else:
+                    data = curve_bytes()
+                return {"value": {"owner": PUMPFUN_PROGRAM, "data": [base64.b64encode(data).decode(), "base64"]}}
             if addr == MD_PDA:
                 return {"value": {"owner": METAPLEX_PROGRAM, "data": [base64.b64encode(metadata_bytes()).decode(), "base64"]}}
             return {"value": None}
@@ -98,7 +107,7 @@ class Fake:
             return {"value": [m.get(a) for a in params[0]]}
         if method == "getTokenAccountsByOwner":
             owner = params[0]
-            amt = {CREATOR: 5 * 10**12, WHALE: 40 * 10**12}.get(owner, 0)
+            amt = {CREATOR: self.dev_balance, WHALE: 40 * 10**12}.get(owner, 0)
             return {"value": [{"account": token_acc(owner, amt)}] if amt else []}
         if method == "getBalance":
             return {"value": 3 * 10**9}

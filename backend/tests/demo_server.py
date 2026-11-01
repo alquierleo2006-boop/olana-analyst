@@ -12,4 +12,6 @@ from .fakes import Fake  # noqa: E402
 
 if __name__ == "__main__":
     db = os.path.join(tempfile.mkdtemp(), "demo.sqlite3")
-    uvicorn.run(create_app(transport=Fake().transport(), db_path=db), host="127.0.0.1", port=8765, log_level="warning")
+    import math
+    walk = [32 + 6 * math.sin(i / 6) + i * 0.15 for i in range(2000)]  # courbe de démo qui monte et redescend
+    uvicorn.run(create_app(transport=Fake(curve_seq=walk).transport(), db_path=db), host="127.0.0.1", port=8765, log_level="warning")
