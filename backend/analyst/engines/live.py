@@ -191,7 +191,9 @@ class LiveWatcher:
         if not w.points and w.cfg.get("auto_targets"):
             # Objectif / stop calculés sur la 1re valeur live (même source que les relevés suivants).
             sc = w.cfg
-            w.targets = {"above": round(float(mcap) * float(sc.get("target_multiple", 2.0))),
+            tp = sc.get("take_profit_pct")
+            mult = 1 + float(tp) / 100 if tp is not None else float(sc.get("target_multiple", 1.4))
+            w.targets = {"above": round(float(mcap) * mult),
                          "below": round(float(mcap) * (1 - float(sc.get("stop_pct", 30)) / 100))}
         w.points.append((time.time(), float(mcap), liq, real_sol))
         w.state["source"] = source

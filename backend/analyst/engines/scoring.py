@@ -201,6 +201,15 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
         if risk["score"] > th.get("max_risk_buy", 5):
             missing.append(f"risque {risk['score']}/10")
         verdict, why = "WATCH", "intéressant mais à confirmer : " + ", ".join(missing)
+    scalp = None
+    if settings.get("trading_mode") == "scalp":
+        from .scalp import checklist
+        scalp = checklist(r, settings)
+        # En mode Scalp, la checklist d'entrée prime : un blocage interdit BUY SETUP.
+        if scalp["decision"] == "NE PAS ENTRER" and verdict != "AVOID":
+            verdict, why = "AVOID", "checklist scalp : " + scalp["reason"]
+        elif scalp["decision"] in ("ATTENDRE", "EN COURS") and verdict == "BUY SETUP":
+            verdict, why = "WATCH", "checklist scalp : " + scalp["reason"]
     interp = next(lbl for lim, lbl in INTERPRETATION if glob is not None and glob < lim) if glob is not None else "—"
     if glob is not None and confidence < th.get("min_confidence", 0.35):
         interp = "non qualifiable (confiance trop faible)" if final else "provisoire — en attente de données"
@@ -216,6 +225,7 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
         "explanation": "Moyenne pondérée : " + " ; ".join(explanation) +
                        (f". Non disponibles (exclues, confiance réduite) : {', '.join(missing_cats)}." if missing_cats else "."),
         "trading_mode": settings.get("trading_mode", "standard"),
+        "scalp": scalp,
         "disclaimer": "Évaluation du potentiel selon les indicateurs disponibles. Ce n'est ni une probabilité ni un "
                       "conseil financier ; aucun ordre n'est passé.",
     }

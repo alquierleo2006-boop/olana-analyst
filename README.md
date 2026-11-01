@@ -62,6 +62,12 @@ Performance (backtesting), Paramètres.
 | STANDARD | heures | 25 / 20 / 25 / 20 / 10 / 0 |
 | HOLD | jours | 25 / 10 / 20 / 20 / 25 / 0 |
 
+**Checklist d'entrée scalp** (en haut de la fiche) : décision ✅ ENTRÉE POSSIBLE / ⏳ ATTENDRE / ⛔ NE PAS ENTRER
+à partir de 8 contrôles — zone de market cap (défaut 6–15 k$), pièges techniques, bundle/snipers, concentration,
+développeur, momentum (achats/ventes 5 min, tx/min et vitesse de la curve), coût aller-retour pour ta taille
+(défaut 0,25 SOL) vs ton objectif (défaut +40 %), réseaux sociaux. Plan de sortie calculé (objectif, stop −20 %,
+gain/perte nets en SOL, taux de réussite minimum pour être rentable). En mode Scalp, un blocage force le verdict AVOID.
+
 **Suivi live (mode Scalp)** : dès la première fiche, la market cap est relue toutes les ~3 s
 (directement sur la bonding curve Pump.fun, sinon DexScreener) avec variations 30 s / 1 min / 5 min, flux net de SOL
 (achats − ventes), plus haut et repli depuis le plus haut, progression de la curve. Alertes (notification Windows) :
@@ -111,7 +117,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 21 tests : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 27 tests : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

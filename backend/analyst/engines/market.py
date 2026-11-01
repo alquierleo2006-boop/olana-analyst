@@ -99,6 +99,17 @@ async def run_market(ctx) -> None:
             m["liquidity_usd"] = dp(curve["real_sol_reserves"] / 1e9 * sol_usd,
                                     "Réserves SOL de la bonding curve (on-chain)", ESTIMATED)
         m.setdefault("pair_addresses", []).append(curve.get("address"))
+        try:
+            sigs = await svc.rpc.signatures(curve["address"], 300)
+            now = time.time()
+            recent = [x for x in sigs if x.get("blockTime") and now - x["blockTime"] <= 300]
+            act = {"tx_per_min_5m": len(recent) / 5, "source": "RPC Solana (transactions de la bonding curve)"}
+            created = ((ctx.result.get("token") or {}).get("created_at") or {}).get("v")
+            if created and curve.get("progress_pct") is not None and now - created > 30:
+                act["progress_per_min"] = curve["progress_pct"] / ((now - created) / 60)
+            m["curve_activity"] = act
+        except Exception:
+            pass
 
     if not (m.get("price_usd") or {}).get("v"):
         m["unavailable"] = "Aucune donnée de marché : token sans pool connu ni bonding curve lisible."

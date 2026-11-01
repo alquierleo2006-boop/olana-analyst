@@ -42,7 +42,8 @@ DEFAULT_SETTINGS: dict = {
         "hold": {"onchain": 25, "momentum": 10, "narrative": 20, "social": 20, "credibility": 25, "smart_money": 0},
     },
     "scalp": {"auto_watch": True, "interval_s": 3, "max_minutes": 60, "reversal_pct": 15, "pump_alert_pct": 25,
-              "target_multiple": 2.0, "stop_pct": 30, "position_sol": 0.5},
+              "target_multiple": 1.4, "stop_pct": 20, "position_sol": 0.25,
+              "entry_mcap_min": 6000, "entry_mcap_max": 15000, "take_profit_pct": 40},
     "thresholds": {"buy_setup_min": 7.0, "avoid_below": 4.0, "min_confidence_buy": 0.6,
                    "min_confidence": 0.35, "max_risk_buy": 5.0},
     "rise_definition_pct": 20.0,
@@ -140,6 +141,11 @@ class Settings:
         if self._cache is None:
             row = self.db.one("SELECT value FROM application_settings WHERE key='settings'")
             stored = json.loads(row["value"]) if row else {}
+            # Migration v0.2.2 : profil scalp de l'utilisateur (entrée 6-15 k$, +40 %, 0,25 SOL).
+            sc = stored.get("scalp")
+            if isinstance(sc, dict) and "entry_mcap_min" not in sc:
+                for k in ("target_multiple", "stop_pct", "position_sol"):
+                    sc.pop(k, None)
             self._cache = deep_merge(DEFAULT_SETTINGS, stored)
         return self._cache
 

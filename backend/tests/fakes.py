@@ -160,7 +160,7 @@ class Fake:
             if o.get("no_sell") and f"inputMint={MINT}" in u:
                 return httpx.Response(400, json={"error": "no route"})
             amt = int(req.url.params["amount"])
-            scale = 1e12 if o.get("thin") else 1e15
+            scale = 1e11 if o.get("thin") else 1e15
             return httpx.Response(200, json={"priceImpactPct": str(min(0.5, amt / scale)),
                                              "routePlan": [{"swapInfo": {"label": "PumpSwap"}}]})
         if "rugcheck.xyz" in u:

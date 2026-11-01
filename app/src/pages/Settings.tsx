@@ -63,13 +63,15 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
         {s.trading_mode === "scalp" && (
           <div className="mt-2">
             <Chk label="Démarrer le suivi live automatiquement après chaque analyse" v={s.scalp.auto_watch} set={(x) => up({ scalp: { ...s.scalp, auto_watch: x } })} />
-            <F k="Taille de position habituelle (SOL)"><Num v={s.scalp.position_sol ?? 0.5} step={0.1} set={(x) => up({ scalp: { ...s.scalp, position_sol: Math.max(0.01, x) } })} /></F>
+            <F k="Zone d'entrée : market cap min ($)"><Num v={s.scalp.entry_mcap_min ?? 6000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_min: x } })} /></F>
+            <F k="Zone d'entrée : market cap max ($)"><Num v={s.scalp.entry_mcap_max ?? 15000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_max: x } })} /></F>
+            <F k="Objectif de sortie (+%)"><Num v={s.scalp.take_profit_pct ?? 40} step={5} set={(x) => up({ scalp: { ...s.scalp, take_profit_pct: x } })} /></F>
+            <F k="Taille de position habituelle (SOL)"><Num v={s.scalp.position_sol ?? 0.25} step={0.05} set={(x) => up({ scalp: { ...s.scalp, position_sol: Math.max(0.01, x) } })} /></F>
             <div className="mb-1 text-[11px] text-muted">Sert à juger la liquidité : l'impact de prix est calculé pour cette taille.</div>
             <F k="Rafraîchissement live (secondes)"><Num v={s.scalp.interval_s} step={0.5} set={(x) => up({ scalp: { ...s.scalp, interval_s: Math.max(1.5, x) } })} /></F>
             <F k="Alerte de retournement (% sous le plus haut)"><Num v={s.scalp.reversal_pct} step={1} set={(x) => up({ scalp: { ...s.scalp, reversal_pct: x } })} /></F>
             <F k="Alerte d'accélération (% en 1 min)"><Num v={s.scalp.pump_alert_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, pump_alert_pct: x } })} /></F>
-            <F k="Objectif par défaut (× market cap d'entrée)"><Num v={s.scalp.target_multiple} step={0.25} set={(x) => up({ scalp: { ...s.scalp, target_multiple: x } })} /></F>
-            <F k="Stop par défaut (% sous la market cap d'entrée)"><Num v={s.scalp.stop_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, stop_pct: x } })} /></F>
+            <F k="Stop (−% sous la market cap d'entrée)"><Num v={s.scalp.stop_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, stop_pct: x } })} /></F>
             <F k="Durée max du suivi (minutes)"><Num v={s.scalp.max_minutes} step={10} set={(x) => up({ scalp: { ...s.scalp, max_minutes: x } })} /></F>
             <div className="text-[11px] text-muted">Avec le RPC public, garde au moins 3 s ; avec une clé Helius gratuite, 2 s conviennent.</div>
           </div>

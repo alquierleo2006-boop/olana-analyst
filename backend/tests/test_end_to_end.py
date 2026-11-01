@@ -74,6 +74,8 @@ def test_full_analysis_pumpfun():
     assert any(m["matched_terms"] for m in r["narrative"]["matches"]), r["narrative"]
     sc = r["scores"]
     assert 0 <= sc["global"] <= 10 and sc["verdict"] in ("BUY SETUP", "WATCH", "AVOID")
+    assert sc["scalp"]["decision"] in ("ENTRÉE POSSIBLE", "ATTENDRE", "NE PAS ENTRER")
+    assert len(sc["scalp"]["checks"]) == 8
     assert set(sc["categories"]) >= {"onchain", "momentum", "narrative", "social", "credibility", "smart_money"}
     assert r["probabilities"]["horizons"]["1h"]["message"] == "DONNÉES INSUFFISANTES POUR UNE PROBABILITÉ FIABLE"
     assert r["timing"]["first_result_ms"] < 5000
