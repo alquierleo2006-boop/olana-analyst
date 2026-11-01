@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { BarChart, HBars, LineChart } from "../components/charts";
+import { BarChart, HBars } from "../components/charts";
 import { Badge, Card, Collapse, Empty, Link, Row, Spinner, Src, Stat, claimTone, riskTone, socialTone } from "../components/ui";
 import { age, dateTime, num, pct, price, scoreTone, short, usd, v } from "../lib/format";
 
@@ -84,9 +84,7 @@ export function Overview({ d }: { d: any }) {
 
 export function OnChain({ d }: { d: any }) {
   const m = d.market || {}, L = d.liquidity || {}, sec = d.security || {}, mom = m.momentum || {};
-  const supply = Number(v(d.token?.supply)) || 0;
   const candles: number[][] = m.candles_1m || [];
-  const mcapPts = candles.map((c) => ({ x: c[0], y: c[4] * supply }));
   const last30 = candles.slice(-30);
   return (
     <Pending d={d} mod={["market", "security", "liquidity"]}>
@@ -108,9 +106,6 @@ export function OnChain({ d }: { d: any }) {
           </div>
           {m.bonding_curve && <div className="mt-2 text-[12px] text-ink2">Bonding curve : <b>{m.bonding_curve.progress_pct?.toFixed(1)}%</b> · réserves {m.bonding_curve.real_sol_reserves?.toFixed(2)} SOL</div>}
           {m.main_pair && <div className="mt-1 text-[11px] text-muted">Paire principale : {m.main_pair.dex} {m.main_pair.url && <Link href={m.main_pair.url}>DexScreener</Link>} · {m.pairs_count ?? "?"} paire(s)</div>}
-        </Card>
-        <Card title="Market cap — bougies 1 min" right={<span className="text-[10px] text-muted">GeckoTerminal</span>}>
-          {mcapPts.length > 1 ? <LineChart points={mcapPts} fmtY={(n) => usd(n, 1)} fmtX={hm} label="Évolution de la market cap" /> : <Empty>Historique de prix indisponible.</Empty>}
         </Card>
         {last30.length > 1 && (
           <Card title="Volume — 30 dernières minutes">
