@@ -88,3 +88,28 @@ def test_auto_targets_use_first_live_value():
     mc = w.points[0][1]
     assert w.targets["above"] == round(mc * 2) and w.targets["below"] == round(mc * 0.7)
     assert not w.alerts  # aucun stop déclenché à tort au démarrage
+
+
+def test_insider_sell_alerts():
+    from .fakes import H1, WHALE
+    fake = Fake(curve_seq=[30, 30, 30, 30])
+    fake.insider_amounts = {"TA_whale": 40 * 10**12, "TA_h1": 30 * 10**12}
+    app = create_app(transport=fake.transport(), db_path=":memory:", start_background=False)
+    st = app.state.st
+    info = {"curve_address": CURVE, "supply": 1e9, "watched_accounts": [
+        {"token_account": "TA_whale", "owner": WHALE, "pct": 4.0, "label": "gros holder"},
+        {"token_account": "TA_h1", "owner": H1, "pct": 3.0, "label": "bundle (financement commun)"}]}
+    with TestClient(app) as c:
+        async def go():
+            w = Watch(MINT, info, {"interval_s": 3})
+            await st.live.tick(w, 0)          # relevé initial
+            fake.insider_amounts["TA_whale"] = 10 * 10**12   # vend 75 %
+            await st.live.tick(w, 2)
+            fake.insider_amounts["TA_h1"] = None              # vend tout et ferme le compte
+            await st.live.tick(w, 4)
+            return w
+        w = c.portal.call(go)
+    codes = [a["code"] for a in w.alerts]
+    assert codes.count("INSIDER_SELL") == 2, codes
+    assert "INSIDER_DUMP" in codes  # 3 % + 3 % = 6 % du supply vendus
+    assert w.state["insiders"]["sold_supply_pct"] == 6.0

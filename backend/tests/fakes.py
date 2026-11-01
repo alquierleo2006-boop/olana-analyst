@@ -53,6 +53,7 @@ class Fake:
         self.opts = opts
         self.curve_i = 0
         self.dev_balance = 5 * 10**12
+        self.insider_amounts: dict = {}
         self.calls: list[str] = []
 
     def rpc(self, method, params):
@@ -102,8 +103,15 @@ class Fake:
                               {"address": "TA_h2", "amount": str(25 * 10**12)},
                               {"address": "TA_dev", "amount": str(5 * 10**12)}]}
         if method == "getMultipleAccounts":
-            m = {"TA_curve": token_acc(CURVE, 0), "TA_whale": token_acc(WHALE, 0), "TA_h1": token_acc(H1, 0),
-                 "TA_h2": token_acc(H2, 0), "TA_dev": token_acc(CREATOR, 0)}
+            amts = self.insider_amounts
+            def ta(owner, key):
+                if key in amts and amts[key] is None:
+                    return None  # compte fermé (tout vendu)
+                acc = token_acc(owner, amts.get(key, 0))
+                acc["data"]["parsed"]["info"]["tokenAmount"]["uiAmountString"] = str(amts.get(key, 0) / 10**6)
+                return acc
+            m = {"TA_curve": ta(CURVE, "TA_curve"), "TA_whale": ta(WHALE, "TA_whale"), "TA_h1": ta(H1, "TA_h1"),
+                 "TA_h2": ta(H2, "TA_h2"), "TA_dev": ta(CREATOR, "TA_dev")}
             return {"value": [m.get(a) for a in params[0]]}
         if method == "getTokenAccountsByOwner":
             owner = params[0]

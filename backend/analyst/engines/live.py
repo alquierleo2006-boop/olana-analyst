@@ -28,6 +28,7 @@ class Watch:
         self.fired: set[str] = set()
         self.high = None
         self.dev_initial = None
+        self.insider_initial: dict[str, float] = {}
         self.state: dict = {}
         self.task: asyncio.Task | None = None
         self.stopped = False
@@ -214,8 +215,42 @@ class LiveWatcher:
                 w.state["dev_balance_raw"] = bal
             except Exception:
                 pass
+        if w.info.get("watched_accounts") and n % max(1, round(6 / w.cfg.get("interval_s", 3))) == 0:
+            try:
+                await self.check_insiders(w)
+            except Exception:
+                pass
         self._emit(w, evaluate_alerts(w, float(mcap), liq))
         w.publish("tick", self.snapshot(w))
+
+    async def check_insiders(self, w: Watch) -> None:
+        """Les gros holders / wallets du bundle vendent-ils pendant le trade ? (1 seule requête RPC)"""
+        accts = w.info["watched_accounts"]
+        res = await self.svc.rpc.multiple_accounts([a["token_account"] for a in accts])
+        supply = w.info.get("supply") or 0
+        sold_total = 0.0
+        for a, acc in zip(accts, res):
+            try:
+                amt = float(acc["data"]["parsed"]["info"]["tokenAmount"]["uiAmountString"]) if acc else 0.0
+            except (TypeError, KeyError, ValueError):
+                continue
+            key = a["token_account"]
+            init = w.insider_initial.setdefault(key, amt)
+            sold = max(0.0, init - amt)
+            if supply:
+                sold_total += 100 * sold / supply
+            if init > 0 and amt < init * 0.5 and (a.get("pct") or 0) >= 1.5:
+                code = f"INSIDER_SELL:{key}"
+                if code not in w.fired:
+                    w.fired.add(code)
+                    self._emit(w, [{"ts": time.time(), "level": "élevé", "code": "INSIDER_SELL",
+                                    "message": f"Un {a['label']} ({a.get('pct', 0):.1f}% du supply, {(a.get('owner') or '')[:6]}…) "
+                                               f"a vendu {100 * sold / init:.0f}% de ses tokens"}])
+        w.state["insiders"] = {"watched": len(accts), "sold_supply_pct": round(sold_total, 2)}
+        if sold_total >= 5 and "INSIDER_DUMP" not in w.fired:
+            w.fired.add("INSIDER_DUMP")
+            self._emit(w, [{"ts": time.time(), "level": "critique", "code": "INSIDER_DUMP",
+                            "message": f"Les gros holders surveillés ont vendu {sold_total:.1f}% du supply depuis ton entrée"}])
 
     def _emit(self, w: Watch, alerts: list[dict]) -> None:
         for a in alerts:
@@ -247,9 +282,15 @@ def watch_info_from_result(r: dict) -> dict:
     curve = (m.get("bonding_curve") or {}).get("address") or ((tok.get("launchpad") or {}).get("bonding_curve") or {}).get("address")
     if (tok.get("launchpad") or {}).get("bonding_curve", {}).get("complete"):
         curve = None
+    bundle = {w for c in (r.get("clusters") or {}).get("clusters") or [] for w in c.get("wallets", [])}
+    watched = []
+    for h in (r.get("holders") or {}).get("top") or []:
+        if h.get("kind") == "wallet" and h.get("token_account") and len(watched) < 15:
+            label = "bundle (financement commun)" if h.get("owner") in bundle else (h.get("label") or "gros holder")
+            watched.append({"token_account": h["token_account"], "owner": h.get("owner"), "pct": h.get("pct"), "label": label})
     return {"name": tok.get("name"), "symbol": tok.get("symbol"), "supply": (tok.get("supply") or {}).get("v"),
             "creator": (r.get("developer") or {}).get("address"), "curve_address": curve,
-            "pair_address": (m.get("main_pair") or {}).get("address")}
+            "pair_address": (m.get("main_pair") or {}).get("address"), "watched_accounts": watched or None}
 
 
 def curve_address(mint: str) -> str:

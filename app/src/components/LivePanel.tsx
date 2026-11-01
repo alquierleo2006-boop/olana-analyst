@@ -67,6 +67,7 @@ export default function LivePanel({ mint, autoStarted }: { mint: string; autoSta
         {s?.state?.curve_progress != null && <span>Bonding curve : <b className="text-ink">{s.state.curve_progress.toFixed(1)}%</b></span>}
         {s?.state?.txns_5m && <span>Achats/ventes 5 min : <b className="text-ink">{s.state.txns_5m.buys}/{s.state.txns_5m.sells}</b></span>}
         {s?.liquidity != null && <span>Liquidité : <b className="text-ink">{usd(s.liquidity)}</b></span>}
+        {s?.state?.insiders && <span>Gros holders / bundle surveillés : <b className="text-ink">{s.state.insiders.watched}</b> · ont vendu <b className={s.state.insiders.sold_supply_pct >= 2 ? "text-bad" : "text-ink"}>{s.state.insiders.sold_supply_pct}%</b> du supply</span>}
         {s?.state?.dev_sold && <Badge tone="bad">le dev a vendu</Badge>}
         {s?.state?.error && <span className="text-warn">erreur de lecture : {s.state.error}</span>}
       </div>
