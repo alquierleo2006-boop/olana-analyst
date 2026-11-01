@@ -48,10 +48,15 @@ def token_acc(owner, amount):
                                          "tokenAmount": {"amount": str(amount), "decimals": 6}}}}}
 
 
+class RateLimited(Exception):
+    pass
+
+
 class Fake:
     def __init__(self, **opts):
         self.opts = opts
         self.curve_i = 0
+        self.curve_fails = 0
         self.dev_balance = 5 * 10**12
         self.insider_amounts: dict = {}
         self.calls: list[str] = []
@@ -67,6 +72,12 @@ class Fake:
                     "type": "mint", "info": {"decimals": 6, "supply": str(10**15),
                                              "mintAuthority": o.get("mint_auth"), "freezeAuthority": None}}}}}
             if addr == CURVE:
+                if o.get("curve_fail", 0) > self.curve_fails:
+                    self.curve_fails += 1
+                    raise RateLimited()
+                if o.get("curve_active"):
+                    data = curve_bytes(False, vsol=31 * 10**9, rsol=1 * 10**9, rtok=760_000_000 * 10**6)
+                    return {"value": {"owner": PUMPFUN_PROGRAM, "data": [base64.b64encode(data).decode(), "base64"]}}
                 if o.get("curve_seq"):  # curve active dont les réserves évoluent à chaque lecture
                     i = min(self.curve_i, len(o["curve_seq"]) - 1)
                     self.curve_i += 1
@@ -131,10 +142,23 @@ class Fake:
             return httpx.Response(503, text="down")
         if "mainnet-beta.solana.com" in u or "helius-rpc" in u:
             body = json.loads(req.content)
-            return httpx.Response(200, json={"jsonrpc": "2.0", "id": body["id"], "result": self.rpc(body["method"], body["params"])})
+            try:
+                result = self.rpc(body["method"], body["params"])
+            except RateLimited:
+                return httpx.Response(429, text="Too many requests")
+            return httpx.Response(200, json={"jsonrpc": "2.0", "id": body["id"], "result": result})
         if "dexscreener.com/tokens/v1/solana/" in u:
             if MINT not in u:
                 return httpx.Response(200, json=[])
+            if o.get("tiny"):
+                return httpx.Response(200, json=[{
+                    "chainId": "solana", "dexId": "pumpfun", "pairAddress": CURVE, "url": "https://dexscreener.com/x",
+                    "baseToken": {"address": MINT, "name": "Robo Cat", "symbol": "RCAT"}, "quoteToken": {"symbol": "SOL"},
+                    "priceUsd": "0.000004", "marketCap": 4000, "fdv": 4000, "liquidity": {"usd": 1500},
+                    "volume": {"m5": 900, "h1": 3000, "h6": 3000, "h24": 3000},
+                    "txns": {"m5": {"buys": 30, "sells": 12}, "h1": {"buys": 80, "sells": 40}, "h6": {"buys": 80, "sells": 40},
+                             "h24": {"buys": 80, "sells": 40}},
+                    "priceChange": {"m5": 10, "h1": 40, "h6": 40, "h24": 40}, "pairCreatedAt": (NOW - 600) * 1000}])
             return httpx.Response(200, json=[{
                 "chainId": "solana", "dexId": "pumpswap", "pairAddress": PAIR, "url": "https://dexscreener.com/solana/x",
                 "baseToken": {"address": MINT, "name": "Robo Cat", "symbol": "RCAT"}, "quoteToken": {"symbol": "SOL"},
@@ -174,7 +198,9 @@ class Fake:
         if "rugcheck.xyz" in u:
             return httpx.Response(200, json={"score_normalised": 12, "rugged": False, "totalHolders": 1834,
                                              "creator": CREATOR, "risks": [{"name": "Low amount of LP Providers",
-                                                                            "level": "warn", "description": "x"}],
+                                                                            "level": "warn", "description": "x"},
+                                                                           {"name": "Low Liquidity", "level": "danger",
+                                                                            "description": "Low amount of liquidity in the token pool"}],
                                              "markets": [{"marketType": "pump_amm", "lp": {"lpLockedPct": 100}}]})
         if "frontend-api-v3.pump.fun/coins/user-created-coins" in u:
             return httpx.Response(200, json=[{"mint": "Old1", "symbol": "OLD", "complete": True,

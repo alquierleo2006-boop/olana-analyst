@@ -92,7 +92,12 @@ async def run_security(ctx) -> None:
                          "source": "RugCheck API"}
         if rc.get("rugged"):
             ctx.risk("critique", "RUGGED", "RugCheck signale ce token comme « rugged »", "RugCheck")
+        curve = await ctx.need("pump_curve", timeout=3)
+        on_curve = (not curve.get("complete")) if curve else ctx.mint.lower().endswith(("pump", "bonk"))
         for r in rc.get("risks") or []:
+            name = (r.get("name") or "").lower()
+            if on_curve and any(k in name for k in ("liquid", "lp ", "lp provider", "lp unlocked", "pool")):
+                continue  # non pertinent tant que la liquidité est détenue par la bonding curve
             if (r.get("level") or "").lower() == "danger":
                 ctx.risk("élevé", f"RC_{(r.get('name') or '')[:30]}",
                          f"RugCheck : {r.get('name')} — {r.get('description') or ''}".strip(" —"), "RugCheck")

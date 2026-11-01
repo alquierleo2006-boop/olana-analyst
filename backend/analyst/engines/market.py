@@ -86,7 +86,7 @@ async def run_market(ctx) -> None:
             m["pair_addresses"] = [p.get("address") for p in pools if p.get("address")]
 
     # Token encore sur bonding curve (pas de pool DEX) : prix lu on-chain.
-    curve = await ctx.need("pump_curve", timeout=4)
+    curve = await get_curve(ctx)
     if curve and not curve.get("complete"):
         m["bonding_curve"] = {"progress_pct": curve.get("progress_pct"),
                               "real_sol_reserves": curve["real_sol_reserves"] / 1e9, "address": curve.get("address")}
@@ -134,6 +134,50 @@ async def run_market(ctx) -> None:
                        (ctx.mint, time.time(), m["mcap"]["src"], (m.get("price_usd") or {}).get("v"),
                         m["mcap"].get("v"), (m.get("fdv") or {}).get("v"), (m.get("liquidity_usd") or {}).get("v"),
                         ((m.get("volume") or {}).get("h24") or {}).get("v")))
+
+
+CURVE_LAUNCHPADS = ("pumpfun", "letsbonk", "launchlab", "meteora_dbc")
+AMM_DEXES = ("pumpswap", "raydium", "orca", "meteora", "fluxbeam")
+PRESUMED_CURVE_MAX_MCAP = 60_000
+
+
+async def get_curve(ctx) -> dict | None:
+    """Bonding curve Pump.fun : valeur du module launchpad, sinon UNE relecture partagée entre les modules."""
+    curve = await ctx.need("pump_curve", timeout=4)
+    if curve:
+        return curve
+    task = getattr(ctx, "_curve_task", None)
+    if task is None:
+        task = asyncio.ensure_future(_read_curve(ctx))
+        ctx._curve_task = task
+    return await asyncio.shield(task)
+
+
+async def _read_curve(ctx) -> dict | None:
+    from ..providers.solana import PUMPFUN_PROGRAM, decode_pump_curve, find_pda, pubkey_bytes
+    pda = find_pda([b"bonding-curve", pubkey_bytes(ctx.mint)], PUMPFUN_PROGRAM)
+    for attempt in range(2):
+        try:
+            raw = await ctx.svc.rpc.account_bytes(pda)
+            if raw and raw[1] == PUMPFUN_PROGRAM:
+                c = decode_pump_curve(raw[0])
+                if c:
+                    c["address"] = pda
+                return c
+            return None  # pas de curve Pump.fun pour ce token
+        except Exception:
+            await asyncio.sleep(0.4 * (attempt + 1))
+    return None
+
+
+def presumed_curve(ctx, m: dict) -> bool:
+    """Token de launchpad très probablement pas encore migré, même si la curve n'a pas pu être lue."""
+    lp = ((ctx.result.get("token") or {}).get("launchpad") or {}).get("id")
+    hinted = lp in CURVE_LAUNCHPADS or ctx.mint.lower().endswith(("pump", "bonk"))
+    mcap = (m.get("mcap") or {}).get("v")
+    dex = ((m.get("main_pair") or {}).get("dex") or "").lower()
+    on_amm = any(dex.startswith(d) for d in AMM_DEXES) and "launch" not in dex and "dbc" not in dex
+    return hinted and (mcap is None or mcap < PRESUMED_CURVE_MAX_MCAP) and not on_amm
 
 
 def analyse_candles(c: list[list], supply: float | None) -> dict:
@@ -202,7 +246,7 @@ async def run_liquidity(ctx) -> None:
     """Impact réel d'entrée / sortie mesuré par devis Jupiter (aucune transaction exécutée)."""
     svc = ctx.svc
     L = ctx.section("liquidity")
-    m = await ctx.need("market", timeout=8) or {}
+    m = await ctx.need("market", timeout=12) or {}
     tok = ctx.result.get("token", {})
     sol_usd = (m.get("sol_usd") or {}).get("v")
     price = (m.get("price_usd") or {}).get("v")
@@ -215,8 +259,9 @@ async def run_liquidity(ctx) -> None:
     pos = float((svc.settings.get("scalp") or {}).get("position_sol", 0.5) or 0.5)
     sizes = sorted({round(pos, 3), 2.0, 10.0})
     L["position_sol"] = pos
-    curve = await ctx.need("pump_curve", timeout=4)
+    curve = await get_curve(ctx)
     if curve and not curve.get("complete") and curve.get("virtual_sol_reserves"):
+        ctx.result.setdefault("token", {})["on_bonding_curve"] = True
         # Bonding curve : liquidité détenue par le programme (non retirable), impact calculé exactement.
         L["mode"] = "bonding_curve"
         L["impact_tests"] = [curve_impact(curve, s_) for s_ in sizes]
@@ -228,7 +273,12 @@ async def run_liquidity(ctx) -> None:
         L["risk_level"] = curve_liquidity_risk(L["impact_tests"], pos)
         _liquidity_risk_events(ctx, L["risk_level"])
         return
-    L["mode"] = "dex"
+    presumed = presumed_curve(ctx, m)
+    L["mode"] = "bonding_curve_presumed" if presumed else "dex"
+    if presumed:
+        ctx.result.setdefault("token", {})["on_bonding_curve"] = True
+        L["note"] = ("Token de launchpad pas encore migré (curve non lue directement) : la liquidité en dollars n'est pas "
+                     "un critère pertinent ; seul l'impact de prix pour ta taille de position est utilisé.")
     if sol_usd and price:
         dec = tok.get("decimals", 6)
         async def q_buy(s):
@@ -261,6 +311,13 @@ async def run_liquidity(ctx) -> None:
         if locks:
             L["lp_locks"] = locks
             L["lp_locks_source"] = "RugCheck"
+    if presumed:
+        tests_ok = [t for t in L.get("impact_tests") or [] if t.get("buy_impact_pct") is not None]
+        L["risk_level"] = curve_liquidity_risk(tests_ok, pos) if tests_ok else \
+            {"level": "inconnu", "score": None, "reasons": ["impact non mesuré"], "status": ESTIMATED}
+        if L["risk_level"].get("score") is not None:
+            _liquidity_risk_events(ctx, L["risk_level"])
+        return
     L["risk_level"] = liquidity_risk(L, m, pos)
     _liquidity_risk_events(ctx, L["risk_level"])
 
@@ -289,7 +346,7 @@ def curve_impact(curve: dict, size_sol: float) -> dict:
 
 
 def curve_liquidity_risk(tests: list[dict], pos: float) -> dict:
-    t = next((x for x in tests if x["size_sol"] == round(pos, 3)), tests[0])
+    t = min(tests, key=lambda x: abs(x["size_sol"] - pos))
     imp = max(t.get("buy_impact_pct") or 0, t.get("sell_impact_pct") or 0)
     level = 0 if imp < 3 else 1 if imp < 8 else 2 if imp < 15 else 3
     reasons = [f"impact pour {pos:g} SOL : {imp:.1f}%", "liquidité non retirable (bonding curve)"]
@@ -310,10 +367,14 @@ def _route(q) -> str | None:
 
 
 def liquidity_risk(L: dict, m: dict, pos: float = 2.0) -> dict:
-    liq = (L.get("total_usd") or {}).get("v") or 0
+    liq = (L.get("total_usd") or {}).get("v")
     reasons = []
     level = 0
-    if liq < 5_000:
+    if liq is None:
+        reasons.append("liquidité non mesurée")
+        if not L.get("impact_tests"):
+            return {"level": "inconnu", "score": None, "reasons": reasons, "status": ESTIMATED}
+    elif liq < 5_000:
         level = 3; reasons.append("liquidité < 5 000 $")
     elif liq < 20_000:
         level = 2; reasons.append("liquidité < 20 000 $")

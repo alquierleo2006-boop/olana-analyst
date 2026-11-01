@@ -4,7 +4,6 @@ import { age, dateTime, scoreTone, short, usd, v, verdictTone } from "../lib/for
 import { copyText } from "../lib/native";
 import { Badge, Button, Card, Spinner, Stat, Tabs, Tone } from "../components/ui";
 import * as T from "./AnalysisTabs";
-import LivePanel from "../components/LivePanel";
 import ScalpCard from "../components/ScalpCard";
 
 const TABS = [
@@ -14,7 +13,7 @@ const TABS = [
   { id: "ai", label: "AI VERDICT" },
 ];
 
-export default function Analysis({ id, compact, mode, onBack, onReanalyze }: { id: number; compact: boolean; mode?: string; onBack: () => void; onReanalyze: (mint: string) => void }) {
+export default function Analysis({ id, compact, onBack, onReanalyze }: { id: number; compact: boolean; mode?: string; onBack: () => void; onReanalyze: (mint: string) => void }) {
   const { data: d, error, firstMs } = useAnalysis(id);
   const [tab, setTab] = useState("overview");
   const [showDetails, setShowDetails] = useState(!compact);
@@ -81,7 +80,7 @@ export default function Analysis({ id, compact, mode, onBack, onReanalyze }: { i
 
       {d.scores?.scalp && <ScalpCard sc={d.scores.scalp} />}
 
-      {d.scores && (mode === "scalp" || d.live_watch) && <LivePanel mint={d.mint} autoStarted={!!d.live_watch?.active} />}
+      {d.live_watch?.active && <div className="text-[11px] text-muted">🛡 Surveillance anti-rug active : notification si le dev, un gros holder ou le bundle vend.</div>}
 
       {critical.length > 0 && (
         <div className="rounded-lg border border-bad/50 bg-bad/10 p-2.5" role="alert">

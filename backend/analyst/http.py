@@ -79,7 +79,7 @@ class Http:
                 r = await self.client.request(method, url, **kw)
                 st.last_latency_ms = int((time.monotonic() - t0) * 1000)
                 if r.status_code == 429 and attempt < retries:
-                    await asyncio.sleep(1.0 + attempt)
+                    await asyncio.sleep(0.4 * (attempt + 1))
                     continue
                 if r.status_code >= 500 and attempt < retries:
                     await asyncio.sleep(0.4)

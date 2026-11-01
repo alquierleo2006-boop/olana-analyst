@@ -13,6 +13,7 @@ from collections import deque
 from ..providers.solana import PUMPFUN_PROGRAM, WSOL_MINT, decode_pump_curve, find_pda, pubkey_bytes
 
 MAX_WATCHES = 5
+RUG_CODES = {"DEV_SOLD", "INSIDER_SELL", "INSIDER_DUMP", "LIQ_DROP"}
 
 
 class Watch:
@@ -253,6 +254,9 @@ class LiveWatcher:
                             "message": f"Les gros holders surveillés ont vendu {sold_total:.1f}% du supply depuis ton entrée"}])
 
     def _emit(self, w: Watch, alerts: list[dict]) -> None:
+        if w.cfg.get("rug_only", True):
+            # Mode « anti-rug seulement » : pas d'alertes de prix (déjà sur le terminal de l'utilisateur).
+            alerts = [a for a in alerts if a["code"] in RUG_CODES]
         for a in alerts:
             w.alerts.append(a)
             name = f"${w.info.get('symbol') or w.mint[:6]}"

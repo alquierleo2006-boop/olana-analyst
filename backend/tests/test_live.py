@@ -18,7 +18,7 @@ def test_live_curve_tracking_and_alerts():
             async def go():
                 from analyst.engines.live import Watch
                 w = Watch(MINT, {"symbol": "RCAT", "supply": 1e9, "creator": CREATOR, "curve_address": CURVE},
-                          {"interval_s": 3, "reversal_pct": 15, "pump_alert_pct": 1000})
+                          {"interval_s": 3, "reversal_pct": 15, "pump_alert_pct": 1000, "rug_only": False})
                 mc0 = None
                 for n in range(7):
                     if n == 5:
@@ -113,3 +113,21 @@ def test_insider_sell_alerts():
     assert codes.count("INSIDER_SELL") == 2, codes
     assert "INSIDER_DUMP" in codes  # 3 % + 3 % = 6 % du supply vendus
     assert w.state["insiders"]["sold_supply_pct"] == 6.0
+
+
+def test_rug_only_mode_filters_price_alerts():
+    from analyst.engines.live import LiveWatcher
+
+    class N:
+        def __init__(self):
+            self.sent = []
+
+        def emit(self, kind, data, title, body):
+            self.sent.append(data["code"])
+
+    n = N()
+    lw = LiveWatcher(None, n)
+    w = Watch("m", {"symbol": "X"}, {"rug_only": True})
+    lw._emit(w, [{"code": "REVERSAL", "message": "x", "level": "élevé", "ts": 0},
+                 {"code": "DEV_SOLD", "message": "y", "level": "critique", "ts": 0}])
+    assert n.sent == ["DEV_SOLD"]

@@ -154,7 +154,7 @@ def risk_score(r: dict) -> dict:
     w = {"critique": 4.0, "élevé": 1.8, "moyen": 0.8, "info": 0}
     s = sum(w.get(x["level"], 0) for x in risks)
     liq = ((r.get("liquidity") or {}).get("risk_level") or {}).get("score") or 0
-    s += liq * 0.7
+    s += (liq or 0) * 0.7
     crit = [x for x in risks if x["level"] == "critique"]
     label = "critique" if crit else "élevé" if s >= 5 else "modéré" if s >= 2 else "faible"
     return {"score": round(clamp(s), 1), "label": label, "critical": crit,

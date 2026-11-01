@@ -41,7 +41,7 @@ DEFAULT_SETTINGS: dict = {
         "scalp": {"onchain": 35, "momentum": 40, "narrative": 10, "social": 10, "credibility": 0, "smart_money": 5},
         "hold": {"onchain": 25, "momentum": 10, "narrative": 20, "social": 20, "credibility": 25, "smart_money": 0},
     },
-    "scalp": {"auto_watch": True, "interval_s": 3, "max_minutes": 60, "reversal_pct": 15, "pump_alert_pct": 25,
+    "scalp": {"auto_watch": True, "rug_only": True, "interval_s": 3, "max_minutes": 60, "reversal_pct": 15, "pump_alert_pct": 25,
               "target_multiple": 1.4, "stop_pct": 20, "position_sol": 0.25,
               "entry_mcap_min": 6000, "entry_mcap_max": 15000, "take_profit_pct": 40},
     "thresholds": {"buy_setup_min": 7.0, "avoid_below": 4.0, "min_confidence_buy": 0.6,

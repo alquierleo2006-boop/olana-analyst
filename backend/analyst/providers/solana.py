@@ -108,9 +108,10 @@ class SolanaRPC:
 
     async def call(self, method: str, params: list | None = None, timeout: float = 8.0):
         self._id += 1
+        # RPC public souvent saturé (HTTP 429) : on réessaie plus patiemment.
         body = await self.http.post_json(self.provider, self.url,
                                          {"jsonrpc": "2.0", "id": self._id, "method": method,
-                                          "params": params or []}, timeout=timeout)
+                                          "params": params or []}, timeout=timeout, retries=3)
         if "error" in body:
             raise ProviderError(self.provider, f"{method}: {body['error'].get('message', body['error'])}")
         return body.get("result")
