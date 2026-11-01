@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0d10;
+  --color-panel: #14171c;
+  --color-panel2: #1b1f26;
+  --color-line: #262b33;
+  --color-ink: #eceef1;
+  --color-ink2: #b4bac3;
+  --color-muted: #7f8792;
+  --color-good: #22b357;
+  --color-warn: #f0a92b;
+  --color-bad: #e5484d;
+  --color-info: #3987e5;
+  --color-series1: #3987e5;
+  --color-series2: #d95926;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: transparent; color: var(--color-ink); font-family: var(--font-sans);
+  font-size: 13px; -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden;
+}
+input, textarea, select, .selectable { user-select: text; }
+.app-shell { background: var(--color-bg); border: 1px solid var(--color-line); border-radius: 12px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #2b3038; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+.num { font-variant-numeric: tabular-nums; }
+@keyframes pulse-soft { 50% { opacity: .45; } }
+.pulse-soft { animation: pulse-soft 1.4s ease-in-out infinite; }

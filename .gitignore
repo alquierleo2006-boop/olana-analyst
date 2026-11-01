@@ -1,0 +1,12 @@
+node_modules/
+dist/
+app/src-tauri/target/
+app/src-tauri/gen/
+app/src-tauri/binaries/
+backend/build/
+backend/dist/
+*.spec
+__pycache__/
+.pytest_cache/
+*.sqlite3*
+.env
