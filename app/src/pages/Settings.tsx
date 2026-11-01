@@ -63,6 +63,8 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
         {s.trading_mode === "scalp" && (
           <div className="mt-2">
             <Chk label="Démarrer le suivi live automatiquement après chaque analyse" v={s.scalp.auto_watch} set={(x) => up({ scalp: { ...s.scalp, auto_watch: x } })} />
+            <F k="Taille de position habituelle (SOL)"><Num v={s.scalp.position_sol ?? 0.5} step={0.1} set={(x) => up({ scalp: { ...s.scalp, position_sol: Math.max(0.01, x) } })} /></F>
+            <div className="mb-1 text-[11px] text-muted">Sert à juger la liquidité : l'impact de prix est calculé pour cette taille.</div>
             <F k="Rafraîchissement live (secondes)"><Num v={s.scalp.interval_s} step={0.5} set={(x) => up({ scalp: { ...s.scalp, interval_s: Math.max(1.5, x) } })} /></F>
             <F k="Alerte de retournement (% sous le plus haut)"><Num v={s.scalp.reversal_pct} step={1} set={(x) => up({ scalp: { ...s.scalp, reversal_pct: x } })} /></F>
             <F k="Alerte d'accélération (% en 1 min)"><Num v={s.scalp.pump_alert_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, pump_alert_pct: x } })} /></F>

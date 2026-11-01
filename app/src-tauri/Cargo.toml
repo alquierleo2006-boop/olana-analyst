@@ -1,6 +1,6 @@
 [package]
 name = "solana-ai-desktop-analyst"
-version = "0.2.0"
+version = "0.2.1"
 description = "Assistant d'analyse de memecoins Solana (lecture seule)"
 edition = "2021"
 

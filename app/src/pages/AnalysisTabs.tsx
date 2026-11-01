@@ -144,7 +144,7 @@ export function OnChain({ d }: { d: any }) {
             </div>
           )}
         </Card>
-        <Card title="Liquidité réelle (devis Jupiter, aucune transaction)" right={L.risk_level && <Badge tone={L.risk_level.score >= 2 ? "bad" : L.risk_level.score === 1 ? "warn" : "good"}>risque {L.risk_level.level}</Badge>}>
+        <Card title={L.mode === "bonding_curve" ? "Liquidité — bonding curve (non retirable)" : "Liquidité réelle (devis Jupiter, aucune transaction)"} right={L.risk_level && <Badge tone={L.risk_level.score >= 2 ? "bad" : L.risk_level.score === 1 ? "warn" : "good"}>risque {L.risk_level.level}</Badge>}>
           {L.impact_tests ? (
             <table className="w-full text-[12px]">
               <thead><tr className="text-left text-[10px] uppercase text-muted"><th>Taille</th><th>Impact achat</th><th>Impact vente</th><th>Route</th></tr></thead>
@@ -157,7 +157,9 @@ export function OnChain({ d }: { d: any }) {
                 </tr>))}</tbody>
             </table>
           ) : <div className="text-[12px] text-muted">Tests d'impact indisponibles (prix ou SOL inconnus).</div>}
-          {L.liq_to_mcap_pct != null && <div className="mt-1 text-[12px] text-ink2">Liquidité / market cap : {L.liq_to_mcap_pct.toFixed(1)}%</div>}
+          {L.note && <div className="mt-1 text-[12px] text-ink2">{L.note}</div>}
+          {L.impact_source && <div className="text-[10px] text-muted">{L.impact_source}{L.position_sol ? ` · ta taille de position : ${L.position_sol} SOL` : ""}</div>}
+          {L.mode !== "bonding_curve" && L.liq_to_mcap_pct != null && <div className="mt-1 text-[12px] text-ink2">Liquidité / market cap : {L.liq_to_mcap_pct.toFixed(1)}%</div>}
           {L.lp_locks?.map((l: any, i: number) => <div key={i} className="text-[12px] text-ink2">LP {l.market} : {l.locked_pct?.toFixed(0)}% verrouillée/brûlée <span className="text-muted">(RugCheck)</span></div>)}
           {L.risk_level?.reasons?.length > 0 && <div className="mt-1 text-[11px] text-muted">{L.risk_level.reasons.join(" · ")}</div>}
         </Card>

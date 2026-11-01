@@ -87,7 +87,10 @@ def evaluate_alerts(w: Watch, mcap: float, liq: float | None) -> list[dict]:
     if liq is not None and len(w.points) > 3:
         liq0 = next((p[2] for p in w.points if p[2]), None)
         if liq0 and liq < liq0 * 0.7:
-            fire("LIQ_DROP", "critique", f"Liquidité en chute : ${liq0:,.0f} → ${liq:,.0f}")
+            if w.state.get("source") == "bonding curve (on-chain)":
+                fire("SELL_PRESSURE", "élevé", f"Forte pression vendeuse : SOL de la curve ${liq0:,.0f} → ${liq:,.0f}")
+            else:
+                fire("LIQ_DROP", "critique", f"Liquidité en chute : ${liq0:,.0f} → ${liq:,.0f}")
     prog = w.state.get("curve_progress")
     if prog is not None and prog >= 90:
         fire("MIGRATION", "info", f"Bonding curve à {prog:.0f}% : migration imminente (forte volatilité possible)")

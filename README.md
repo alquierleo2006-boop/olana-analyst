@@ -111,7 +111,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 20 tests : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 21 tests : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

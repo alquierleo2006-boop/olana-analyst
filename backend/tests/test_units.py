@@ -72,3 +72,16 @@ def test_probability_model_calibrated():
     m = fit_probability_model(S, 20, 100)
     assert m["usable"] is True and m["brier"] < m["brier_base_rate"]
     assert m["buckets"][-1]["probability"] > m["buckets"][0]["probability"]
+
+
+def test_curve_liquidity_not_critical_on_fresh_pumpfun_token():
+    from analyst.engines.market import curve_impact, curve_liquidity_risk
+    # Curve neuve (~8 k$ de market cap) : 30 SOL virtuels, 1,073 Md de tokens virtuels, presque rien de réel.
+    curve = {"virtual_sol_reserves": 31 * 10**9, "virtual_token_reserves": 1_040_000_000 * 10**6,
+             "real_token_reserves": 760_000_000 * 10**6}
+    tests = [curve_impact(curve, s) for s in (0.5, 2.0, 10.0)]
+    assert 1.0 < tests[0]["buy_impact_pct"] < 2.5  # 0,5 SOL ≈ 1,6 %
+    assert tests[2]["buy_impact_pct"] > 25
+    risk = curve_liquidity_risk(tests, 0.5)
+    assert risk["level"] == "faible"
+    assert curve_liquidity_risk(tests, 2.0)["level"] == "modéré"

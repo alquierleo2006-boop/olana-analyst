@@ -201,9 +201,25 @@ async def run_liquidity(ctx) -> None:
     if liq and mcap:
         L["liq_to_mcap_pct"] = 100 * liq / mcap
     tests = []
+    pos = float((svc.settings.get("scalp") or {}).get("position_sol", 0.5) or 0.5)
+    sizes = sorted({round(pos, 3), 2.0, 10.0})
+    L["position_sol"] = pos
+    curve = await ctx.need("pump_curve", timeout=4)
+    if curve and not curve.get("complete") and curve.get("virtual_sol_reserves"):
+        # Bonding curve : liquidité détenue par le programme (non retirable), impact calculé exactement.
+        L["mode"] = "bonding_curve"
+        L["impact_tests"] = [curve_impact(curve, s_) for s_ in sizes]
+        L["impact_source"] = "Calcul exact sur la bonding curve (produit constant, hors frais de plateforme)"
+        if sol_usd:
+            L["curve_depth_usd"] = curve["virtual_sol_reserves"] / 1e9 * sol_usd
+        L["note"] = ("Token encore sur bonding curve : la liquidité ne peut pas être retirée par le créateur et la "
+                     "revente est toujours possible. Le risque se mesure par l'impact de prix pour ta taille de position.")
+        L["risk_level"] = curve_liquidity_risk(L["impact_tests"], pos)
+        _liquidity_risk_events(ctx, L["risk_level"])
+        return
+    L["mode"] = "dex"
     if sol_usd and price:
         dec = tok.get("decimals", 6)
-        sizes = [0.5, 2.0, 10.0]
         async def q_buy(s):
             return await svc.jup.quote(WSOL_MINT, ctx.mint, int(s * 1e9))
         async def q_sell(s):
@@ -234,13 +250,40 @@ async def run_liquidity(ctx) -> None:
         if locks:
             L["lp_locks"] = locks
             L["lp_locks_source"] = "RugCheck"
-    L["risk_level"] = liquidity_risk(L, m)
-    lvl = L["risk_level"]
+    L["risk_level"] = liquidity_risk(L, m, pos)
+    _liquidity_risk_events(ctx, L["risk_level"])
+
+
+def _liquidity_risk_events(ctx, lvl: dict) -> None:
     if lvl["score"] == 3:
         ctx.risk("critique", "LIQUIDITY", "Liquidité critique : sortie difficile ou très coûteuse (" +
                  "; ".join(lvl["reasons"]) + ")", "Liquidité")
     elif lvl["score"] == 2:
         ctx.risk("élevé", "LIQUIDITY", "Liquidité faible : " + "; ".join(lvl["reasons"]), "Liquidité")
+
+
+def curve_impact(curve: dict, size_sol: float) -> dict:
+    """Impact de prix exact d'un achat / d'une vente de `size_sol` SOL sur une bonding curve à produit constant."""
+    vsol, vtok = curve["virtual_sol_reserves"] / 1e9, curve["virtual_token_reserves"] / 1e6
+    k, p0 = vsol * vtok, vsol / vtok
+    out = vtok - k / (vsol + size_sol)
+    buy = 100 * ((size_sol / out) / p0 - 1) if out > 0 else None
+    t = size_sol / p0
+    sol_out = vsol - k / (vtok + t)
+    sell = 100 * (1 - (sol_out / t) / p0) if t > 0 else None
+    exceeds = out > curve.get("real_token_reserves", 0) / 1e6 if curve.get("real_token_reserves") else False
+    return {"size_sol": size_sol, "buy_impact_pct": buy, "sell_impact_pct": sell,
+            "buy_route": "bonding curve", "sell_route": "bonding curve", "buy_error": None, "sell_error": None,
+            "note": "achat > tokens restants : déclenche la migration" if exceeds else None}
+
+
+def curve_liquidity_risk(tests: list[dict], pos: float) -> dict:
+    t = next((x for x in tests if x["size_sol"] == round(pos, 3)), tests[0])
+    imp = max(t.get("buy_impact_pct") or 0, t.get("sell_impact_pct") or 0)
+    level = 0 if imp < 3 else 1 if imp < 8 else 2 if imp < 15 else 3
+    reasons = [f"impact pour {pos:g} SOL : {imp:.1f}%", "liquidité non retirable (bonding curve)"]
+    return {"level": ["faible", "modéré", "élevé", "critique"][level], "score": level, "reasons": reasons,
+            "status": ESTIMATED}
 
 
 def _impact(q) -> float | None:
@@ -255,7 +298,7 @@ def _route(q) -> str | None:
     return " → ".join((r.get("swapInfo") or {}).get("label", "?") for r in q.get("routePlan") or [])
 
 
-def liquidity_risk(L: dict, m: dict) -> dict:
+def liquidity_risk(L: dict, m: dict, pos: float = 2.0) -> dict:
     liq = (L.get("total_usd") or {}).get("v") or 0
     reasons = []
     level = 0
@@ -265,10 +308,10 @@ def liquidity_risk(L: dict, m: dict) -> dict:
         level = 2; reasons.append("liquidité < 20 000 $")
     elif liq < 75_000:
         level = 1; reasons.append("liquidité modérée")
-    t2 = next((t for t in L.get("impact_tests") or [] if t["size_sol"] == 2.0), None)
+    t2 = next((t for t in L.get("impact_tests") or [] if t["size_sol"] == round(pos, 3)), None)
     if t2 and t2.get("sell_impact_pct") is not None:
         imp = t2["sell_impact_pct"]
-        reasons.append(f"vente de 2 SOL : impact {imp:.1f}%")
+        reasons.append(f"vente de {pos:g} SOL : impact {imp:.1f}%")
         if imp > 15:
             level = max(level, 3)
         elif imp > 5:
