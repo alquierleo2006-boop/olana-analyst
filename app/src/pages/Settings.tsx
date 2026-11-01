@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { registerShortcut } from "../lib/native";
 import { Badge, Button, Card } from "../components/ui";
+import { isTech } from "../lib/edition";
 
 const SECRETS: [string, string, string][] = [
   ["helius_api_key", "Clé Helius (gratuite)", "helius.dev → plan gratuit. Débloque le nombre de holders, le top 50 et le smart money."],
@@ -19,8 +20,10 @@ const LLM_PRESETS: Record<string, { base_url: string; model: string }> = {
   gemini: { base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash" },
   openrouter: { base_url: "https://openrouter.ai/api/v1", model: "meta-llama/llama-3.3-70b-instruct:free" },
 };
-const WEIGHTS: [string, string][] = [["onchain", "On-chain & sécurité"], ["momentum", "Momentum (5 min)"], ["narrative", "Narrative & actualités"],
+const WEIGHTS_SCALP: [string, string][] = [["onchain", "On-chain & sécurité"], ["momentum", "Momentum (5 min)"], ["narrative", "Narrative & actualités"],
   ["social", "Réseaux sociaux"], ["smart_money", "Smart money"]];
+const WEIGHTS_TECH: [string, string][] = [["onchain", "On-chain & sécurité"], ["credibility", "Crédibilité du projet (code, site, affirmations)"],
+  ["narrative", "Narrative & actualités"], ["momentum", "Momentum"], ["social", "Réseaux sociaux"], ["smart_money", "Smart money"]];
 
 export default function Settings({ back, onSaved }: { back: () => void; onSaved: (s: any) => void }) {
   const [s, setS] = useState<any>(null);
@@ -46,21 +49,23 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
   const inp = "rounded-md border border-line bg-panel2 px-2 py-1 text-[12px] outline-none focus:border-info/60";
   const W = s.weights;
   const setW = (k: string, val: number) => up({ weights: { ...s.weights, [k]: val } });
+  const WEIGHTS = isTech() ? WEIGHTS_TECH : WEIGHTS_SCALP;
   const totalW = WEIGHTS.reduce((a, [k]) => a + (Number(W[k]) || 0), 0);
   return (
     <div className="space-y-2.5 p-3">
       <div className="flex items-center justify-between"><Button onClick={back}>← Accueil</Button><h2 className="text-[13px] font-bold">PARAMÈTRES</h2><Button kind="primary" onClick={save}>Enregistrer</Button></div>
       {msg && <div className="text-[12px] text-info">{msg}</div>}
-      <Card title="Ma stratégie scalp">
+      <Card title={isTech() ? "Ma stratégie tech" : "Ma stratégie scalp"}>
         {(
           <div>
-            <F k="Zone d'entrée : market cap min ($)"><Num v={s.scalp.entry_mcap_min ?? 6000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_min: x } })} /></F>
-            <F k="Zone d'entrée : market cap max ($)"><Num v={s.scalp.entry_mcap_max ?? 15000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_max: x } })} /></F>
+            {!isTech() && <><F k="Zone d'entrée : market cap min ($)"><Num v={s.scalp.entry_mcap_min ?? 6000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_min: x } })} /></F>
+            <F k="Zone d'entrée : market cap max ($)"><Num v={s.scalp.entry_mcap_max ?? 15000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_max: x } })} /></F></>}
             <F k="Objectif de sortie (+%)"><Num v={s.scalp.take_profit_pct ?? 40} step={5} set={(x) => up({ scalp: { ...s.scalp, take_profit_pct: x } })} /></F>
             <F k="Stop (−% sous la market cap d'entrée)"><Num v={s.scalp.stop_pct} step={5} set={(x) => up({ scalp: { ...s.scalp, stop_pct: x } })} /></F>
             <F k="Taille de position habituelle (SOL)"><Num v={s.scalp.position_sol ?? 0.25} step={0.05} set={(x) => up({ scalp: { ...s.scalp, position_sol: Math.max(0.01, x) } })} /></F>
             <div className="mb-1 text-[11px] text-muted">La taille sert à juger la liquidité (impact de prix) et à calculer ton plan de sortie.</div>
             <Chk label="Alertes anti-rug en notification après chaque analyse (le dev, un gros holder ou le bundle vend)" v={s.scalp.auto_watch} set={(x) => up({ scalp: { ...s.scalp, auto_watch: x } })} />
+            <F k="Fenêtre de suivi des résultats (minutes)"><Num v={s.outcome_window_min} step={30} set={(x) => up({ outcome_window_min: Math.max(15, x) })} /></F>
             <F k="Durée de la surveillance anti-rug (minutes)"><Num v={s.scalp.max_minutes} step={10} set={(x) => up({ scalp: { ...s.scalp, max_minutes: x } })} /></F>
           </div>
         )}

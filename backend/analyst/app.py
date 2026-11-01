@@ -122,7 +122,8 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
     @app.get("/api/health", dependencies=A)
     async def health():
         s = st.settings.all()
-        return {"version": __version__, "time": time.time(), "read_only": True,
+        from .config import EDITION
+        return {"version": __version__, "edition": EDITION, "time": time.time(), "read_only": True,
                 "live_watches": len([w for w in st.live.watches.values() if not w.stopped]),
                 "llm": {"available": st.svc.llm.available, "provider": s["llm"]["provider"]},
                 "helius": bool(st.secrets.get("helius_api_key")),

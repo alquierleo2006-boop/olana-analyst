@@ -23,10 +23,11 @@ def schedule_scalp(db, analysis_id: int, t0: float, r: dict, settings: dict) -> 
     sc = settings.get("scalp") or {}
     chk = ((r.get("scores") or {}).get("scalp") or {})
     plan = chk.get("plan") or {}
-    db.execute("INSERT OR IGNORE INTO scalp_outcomes(analysis_id, due_at, tp_pct, sl_pct, cost_pct, score, decision) "
-               "VALUES(?,?,?,?,?,?,?)",
-               (analysis_id, t0 + SCALP_WINDOW_S, float(sc.get("take_profit_pct", 40)), float(sc.get("stop_pct", 20)),
-                plan.get("cost_pct"), (r.get("scores") or {}).get("global"), chk.get("decision")))
+    window = float(settings.get("outcome_window_min", 60)) * 60
+    db.execute("INSERT OR IGNORE INTO scalp_outcomes(analysis_id, due_at, tp_pct, sl_pct, cost_pct, score, decision, window_s) "
+               "VALUES(?,?,?,?,?,?,?,?)",
+               (analysis_id, t0 + window, float(sc.get("take_profit_pct", 40)), float(sc.get("stop_pct", 20)),
+                plan.get("cost_pct"), (r.get("scores") or {}).get("global"), chk.get("decision"), window))
 
 
 def scalp_outcome(candles: list[list], t0: float, tp: float, sl: float, window_s: float = SCALP_WINDOW_S) -> dict | None:
@@ -126,7 +127,7 @@ class Tracker:
 
     async def run_scalp_once(self) -> int:
         db = self.svc.db
-        due = db.all("SELECT s.analysis_id, s.tp_pct, s.sl_pct, s.cost_pct, a.created_at, a.result_json FROM scalp_outcomes s "
+        due = db.all("SELECT s.analysis_id, s.tp_pct, s.sl_pct, s.cost_pct, s.window_s, a.created_at, a.result_json FROM scalp_outcomes s "
                      "JOIN token_analyses a ON a.id = s.analysis_id WHERE s.status='pending' AND s.due_at <= ? "
                      "ORDER BY s.due_at LIMIT 10", (time.time(),))
         for d in due:
@@ -135,8 +136,11 @@ class Tracker:
             o = None
             if pool:
                 try:
-                    o = scalp_outcome(await self.svc.gecko.ohlcv(pool, "minute", 1, 300), d["created_at"],
-                                      d["tp_pct"], d["sl_pct"])
+                    w = d["window_s"] or SCALP_WINDOW_S
+                    # 1 min jusqu'à 5 h de fenêtre ; au-delà, bougies de 5 min.
+                    agg = 1 if w <= 5 * 3600 else 5
+                    o = scalp_outcome(await self.svc.gecko.ohlcv(pool, "minute", agg, 1000 if agg > 1 else 300),
+                                      d["created_at"], d["tp_pct"], d["sl_pct"], w)
                 except Exception:
                     o = None
             if not o:
@@ -252,7 +256,8 @@ def probabilities_for(db, score: float | None, settings: dict) -> dict:
     out = {"definition": f"hausse ≥ {rise:g}% du prix depuis l'analyse, après {FEES_ROUNDTRIP_PCT:g}% de frais estimés",
            "horizons": {}}
     model = fit_probability_model(_scalp_samples(db), 0, min_test)
-    key = f"objectif +{sc.get('take_profit_pct', 40):g}% avant stop −{sc.get('stop_pct', 20):g}% (1 h)"
+    win_h = float(settings.get("outcome_window_min", 60)) / 60
+    key = f"objectif +{sc.get('take_profit_pct', 40):g}% avant stop −{sc.get('stop_pct', 20):g}% ({win_h:g} h)"
     if model["usable"] and score is not None:
         b = model["buckets"][bucket_of(score)]
         out["scalp"] = {"label": key, "available": True, "probability": b["probability"], "ci95": b["ci95"],
@@ -344,6 +349,6 @@ def scalp_report(db) -> dict:
     by_decision = {d: agg([r for r in rows if r["decision"] == d]) for d in {r["decision"] for r in rows} if d}
     return {"observations": len(rows), "pending": pending, "overall": agg(rows) if rows else None,
             "by_score": by_score, "by_decision": by_decision,
-            "definition": "Trade rejoué minute par minute pendant 1 h après l'analyse : gagnant si l'objectif est touché "
+            "definition": "Trade rejoué minute par minute pendant la fenêtre de suivi après l'analyse : gagnant si l'objectif est touché "
                           "avant le stop ; si les deux le sont dans la même minute, compté perdant. PnL moyen après coût "
                           "aller-retour estimé."}

@@ -134,6 +134,53 @@ def score_momentum(r: dict) -> dict:
     return _s(s, min(0.9, 0.35 + 0.12 * n), ["5 min, activité de la curve, traders uniques, volume"], pos, neg)
 
 
+def score_momentum_20m(r: dict) -> dict:
+    """Édition tech : momentum sur 20 minutes (prix, volume vs 20 min précédentes, achats/ventes 30 min, curve)."""
+    m = r.get("market") or {}
+    if not (m.get("price_usd") or {}).get("v"):
+        return _s(None, 0, ["aucune donnée de marché"])
+    s, pos, neg, n = 5.0, [], [], 0
+    mom = m.get("momentum") or {}
+    ch = (mom.get("change") or {}).get("20m")
+    if ch is not None:
+        n += 1
+        if ch > 25:
+            s += 1.5; pos.append(f"+{ch:.0f}% sur 20 min")
+        elif ch > 5:
+            s += 0.8
+        elif ch < -25:
+            s -= 2.0; neg.append(f"{ch:.0f}% sur 20 min")
+        elif ch < -8:
+            s -= 0.8
+    tr = mom.get("volume_20m_trend")
+    if tr is not None:
+        n += 1
+        if tr > 1.5:
+            s += 1.0; pos.append(f"volume des 20 dernières min ×{tr:.1f} vs les 20 précédentes")
+        elif tr < 0.5:
+            s -= 1.0; neg.append("volume en net recul sur 20 min")
+    tx = (m.get("gecko_txns") or {}).get("m30") or (m.get("txns") or {}).get("h1") or {}
+    b, se = tx.get("buys") or 0, tx.get("sells") or 0
+    if b + se >= 15:
+        n += 1
+        ratio = b / max(1, se)
+        if ratio >= 1.5:
+            s += 1.2; pos.append(f"acheteurs dominants ({b}/{se})")
+        elif ratio < 0.75:
+            s -= 1.5; neg.append(f"vendeurs dominants ({b}/{se})")
+    tpm = (m.get("curve_activity") or {}).get("tx_per_min_20m")
+    if tpm is not None:
+        n += 1
+        if tpm >= 10:
+            s += 0.6; pos.append(f"curve active ({tpm:.0f} tx/min sur 20 min)")
+        elif tpm < 1:
+            s -= 0.8; neg.append("curve quasi inactive sur 20 min")
+    org = m.get("organic") or {}
+    if org.get("level") == "suspect":
+        s -= 1.5; neg.append("activité possiblement artificielle")
+    return _s(s, min(0.9, 0.35 + 0.13 * n), ["20 min : prix, volume, achats/ventes, activité de la curve"], pos, neg)
+
+
 def score_from_section(r: dict, key: str) -> dict:
     sc = ((r.get(key) or {}).get("score")) or {}
     if not sc or sc.get("score") is None:
@@ -160,6 +207,13 @@ def score_credibility(r: dict) -> dict:
         pos.append(f"{len(conf_claims)} affirmation(s) confirmée(s) par des sources indépendantes")
     if unv:
         neg.append(f"{len(unv)} affirmation(s) promotionnelle(s) non vérifiée(s)")
+    o = r.get("originality") or {}
+    if o.get("verdict") == "copie probable":
+        s -= 3.0; neg.append("copie probable d'un autre projet")
+    elif o.get("verdict") == "peu originale":
+        s -= 1.0; neg.append("projet peu original")
+    elif o.get("verdict") == "originale":
+        s += 0.5; pos.append("projet original (pas de copie ni de concept saturé trouvé)")
     return _s(s, (proj or {}).get("confidence", 0.4), ["site, documentation, GitHub, fact-checking"], pos, neg)
 
 
@@ -182,7 +236,8 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
     # Niveau de risque accepté : ajuste uniquement le risque maximal toléré pour un BUY SETUP.
     th["max_risk_buy"] = {"prudent": 3.5, "normal": th.get("max_risk_buy", 5.0), "agressif": 6.5}.get(
         settings.get("risk_tolerance", "normal"), th.get("max_risk_buy", 5.0))
-    cats = {"onchain": score_onchain(r), "momentum": score_momentum(r),
+    from ..config import EDITION as _ED
+    cats = {"onchain": score_onchain(r), "momentum": score_momentum_20m(r) if _ED == "tech" else score_momentum(r),
             "narrative": score_from_section(r, "narrative"), "social": score_from_section(r, "social"),
             "credibility": score_credibility(r), "smart_money": score_from_section(r, "smart_money")}
     tot_w = sum(weights.get(c, 0) for c in CATS) or 1
@@ -216,8 +271,12 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
             missing.append(f"risque {risk['score']}/10")
         verdict, why = "WATCH", "intéressant mais à confirmer : " + ", ".join(missing)
     scalp = None
-    if True:  # logiciel 100 % scalp
-        from .scalp import checklist
+    if True:
+        from ..config import EDITION
+        if EDITION == "tech":
+            from .tech import checklist
+        else:
+            from .scalp import checklist
         scalp = checklist(r, settings)
         # En mode Scalp, la checklist d'entrée prime : un blocage interdit BUY SETUP.
         if scalp["decision"] == "NE PAS ENTRER" and verdict != "AVOID":

@@ -133,6 +133,11 @@ def checklist(r: dict, settings: dict) -> dict:
         else:
             checks.append(_c("Réseaux sociaux", WARN, "aucun compte vérifiable (fréquent à ce stade)"))
 
+    decision, why = decide(checks)
+    return finish(checks, decision, why, mcap, tp, sl, pos, L)
+
+
+def decide(checks: list[dict]) -> tuple[str, str]:
     bads = [c for c in checks if c["status"] == BAD]
     warns = [c for c in checks if c["status"] == WARN]
     waits = [c for c in checks if c["status"] == WAIT]
@@ -144,7 +149,18 @@ def checklist(r: dict, settings: dict) -> dict:
         decision, why = "EN COURS", "contrôles encore en cours : " + ", ".join(c["name"].lower() for c in waits)
     else:
         decision, why = "ENTRÉE POSSIBLE", "aucun blocage" + (f", {len(warns)} point(s) d'attention" if warns else "")
+    return decision, why
 
+
+def cost_for(L: dict, pos: float) -> float | None:
+    t = next((x for x in L.get("impact_tests") or [] if abs(x["size_sol"] - pos) < 1e-9), None)
+    if t and t.get("buy_impact_pct") is not None and t.get("sell_impact_pct") is not None:
+        return t["buy_impact_pct"] + t["sell_impact_pct"] + 2 * PLATFORM_FEE_PCT
+    return None
+
+
+def finish(checks, decision, why, mcap, tp, sl, pos, L) -> dict:
+    cost = cost_for(L, pos)
     plan = None
     if mcap:
         net_tp = tp - (cost or 0)

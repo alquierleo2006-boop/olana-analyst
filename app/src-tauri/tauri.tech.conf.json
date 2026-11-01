@@ -1,0 +1,26 @@
+{
+  "productName": "Solana Tech Analyst",
+  "identifier": "com.solanaanalyst.tech",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Solana Tech Analyst",
+        "width": 560,
+        "height": 760,
+        "minWidth": 380,
+        "minHeight": 460,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "resizable": true,
+        "shadow": true,
+        "center": true
+      }
+    ]
+  },
+  "bundle": {
+    "icon": ["icons-tech/32x32.png", "icons-tech/128x128.png", "icons-tech/128x128@2x.png", "icons-tech/icon.icns", "icons-tech/icon.ico"],
+    "shortDescription": "Analyse de projets tech Solana (lecture seule)"
+  }
+}

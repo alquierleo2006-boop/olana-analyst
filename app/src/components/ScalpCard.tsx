@@ -1,5 +1,6 @@
 import { usd } from "../lib/format";
 import { Card, Spinner } from "./ui";
+import { isTech } from "../lib/edition";
 
 const ICON: Record<string, [string, string]> = {
   ok: ["✓", "text-good"], attention: ["!", "text-warn"], bloquant: ["✕", "text-bad"], "en attente": ["…", "text-muted"],
@@ -14,7 +15,7 @@ export default function ScalpCard({ sc }: { sc: any }) {
   const icon = d === "ENTRÉE POSSIBLE" ? "✅" : d === "NE PAS ENTRER" ? "⛔" : d === "ATTENDRE" ? "⏳" : "";
   const p = sc.plan;
   return (
-    <Card title="Checklist d'entrée scalp">
+    <Card title={isTech() ? "Checklist d'entrée tech" : "Checklist d'entrée scalp"}>
       <div className={`mb-2 rounded-md border px-3 py-2 ${tone}`}>
         <div className="text-[16px] font-extrabold tracking-wide">{icon} {d === "EN COURS" ? <><Spinner /> ANALYSE EN COURS</> : d}</div>
         <div className="text-[12px] text-ink2">{sc.reason}</div>

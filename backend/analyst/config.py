@@ -6,7 +6,11 @@ import json
 import os
 from pathlib import Path
 
-APP_NAME = "SolanaAIDesktopAnalyst"
+APP_NAME = "SolanaAIDesktopAnalyst"  # aussi le nom du coffre des clés : partagé entre les deux éditions
+# Édition : « scalp » (memecoins, minutes) ou « tech » (projets technologiques tenus plus longtemps).
+EDITION = os.environ.get("ANALYST_EDITION", "scalp").strip().lower()
+if EDITION not in ("scalp", "tech"):
+    EDITION = "scalp"
 
 
 def data_dir() -> Path:
@@ -49,9 +53,21 @@ DEFAULT_SETTINGS: dict = {
                       "smart_money": True, "narrative_acceleration": True, "score_change": 1.5, "claim_confirmed": True,
                       "telegram": False},
     "narrative_refresh_minutes": 10,
+    "outcome_window_min": 60,
     "history_retention_days": 365,
     "tracking_enabled": True,
 }
+
+TECH_OVERRIDES = {
+    "shortcut": "CommandOrControl+Alt+Space",
+    # Projet tech : la crédibilité (produit réel, GitHub, docs, affirmations vérifiées) pèse autant que la sécurité.
+    "weights": {"onchain": 25, "momentum": 15, "narrative": 20, "social": 15, "credibility": 25, "smart_money": 0},
+    "scalp": {"take_profit_pct": 50, "stop_pct": 25, "position_sol": 0.25, "entry_mcap_min": 20000,
+              "entry_mcap_max": 500000, "target_multiple": 1.5, "max_minutes": 360},
+    "outcome_window_min": 360,
+    "narrative_refresh_minutes": 5,
+}
+
 
 # Noms des secrets (stockés via keyring, jamais en clair dans la base).
 SECRET_NAMES = ["helius_api_key", "birdeye_api_key", "llm_api_key", "telegram_bot_token",
@@ -66,6 +82,10 @@ def deep_merge(base: dict, override: dict) -> dict:
         else:
             out[k] = v
     return out
+
+
+if EDITION == "tech":
+    DEFAULT_SETTINGS = deep_merge(DEFAULT_SETTINGS, TECH_OVERRIDES)
 
 
 class Secrets:

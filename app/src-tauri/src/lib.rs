@@ -83,10 +83,13 @@ fn start_backend(app: &AppHandle) -> Backend {
     let token = uuid::Uuid::new_v4().simple().to_string();
     let url = format!("http://127.0.0.1:{port}");
     let data_dir = app.path().app_data_dir().ok().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    // Deux éditions installables côte à côte : l'identifiant de l'application choisit l'édition du moteur.
+    let edition = if app.config().identifier.ends_with(".tech") { "tech" } else { "scalp" };
     let envs = [
         ("ANALYST_PORT", port.to_string()),
         ("ANALYST_TOKEN", token.clone()),
         ("ANALYST_DATA_DIR", data_dir),
+        ("ANALYST_EDITION", edition.to_string()),
     ];
 
     // Mode développement : ANALYST_BACKEND_DIR pointe vers le dossier backend (Python installé requis).
@@ -162,7 +165,7 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&show, &quit])?;
             TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("Solana AI Desktop Analyst")
+                .tooltip(app.config().product_name.clone().unwrap_or_else(|| "Solana AI Desktop Analyst".into()))
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {

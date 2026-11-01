@@ -8,7 +8,8 @@ import time
 import traceback
 
 from .engines import identify as ident
-from .engines import market, onchain, scoring, smartmoney, social, tracker
+from .engines import market, onchain, originality, scoring, smartmoney, social, tracker
+from .config import EDITION
 from .engines.context import Ctx, InvalidAddress, TokenNotFound
 from .engines.narratives import run_narrative
 
@@ -63,6 +64,8 @@ class Analyzer:
             "social": (2, social.run_social), "clusters": (2, onchain.run_clusters),
             "narrative": (2, lambda c: run_narrative(c, self.narratives)),
             "smart_money": (2, smartmoney.run_smart_money), "momentum": (2, market.run_momentum),
+            **({"project": (3, social.run_project), "factcheck": (3, social.run_factcheck),
+                "originality": (3, originality.run_originality)} if EDITION == "tech" else {}),
         }
 
     async def _run(self, an: Analysis) -> None:
@@ -104,7 +107,7 @@ class Analyzer:
                 first_sent.set()
 
         async def deadline():
-            await asyncio.sleep(SCALP_FIRST_RESULT_S)
+            await asyncio.sleep(SCALP_FIRST_RESULT_S if EDITION == "scalp" else FIRST_RESULT_TARGET_S["memecoin"])
             if not first_sent.is_set():
                 self._first_result(an, t0, partial=True)
                 first_sent.set()
@@ -113,8 +116,12 @@ class Analyzer:
         await asyncio.gather(*[run_mod(n) for n in mods])
         dl.cancel()
 
-        r["mode"] = {"value": "memecoin", "certainty": 1.0, "reasons": ["logiciel dédié au scalp de memecoins"]}
-        target = SCALP_FIRST_RESULT_S
+        if EDITION == "tech":
+            r["mode"] = ident.classify_mode(r)
+            target = FIRST_RESULT_TARGET_S["projet"]
+        else:
+            r["mode"] = {"value": "memecoin", "certainty": 1.0, "reasons": ["logiciel dédié au scalp de memecoins"]}
+            target = SCALP_FIRST_RESULT_S
         r["timing"]["target_s"] = target
         r["timing"]["first_result_within_target"] = r["timing"]["first_result_ms"] <= target * 1000
         r["scores"] = scoring.compute(r, settings, final=True)

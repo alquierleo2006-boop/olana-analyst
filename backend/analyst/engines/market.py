@@ -76,6 +76,7 @@ async def run_market(ctx) -> None:
         m["unique_traders"] = {k: {"buyers": (tx.get(k) or {}).get("buyers"), "sellers": (tx.get(k) or {}).get("sellers")}
                                for k in ("m5", "m15", "h1", "h24") if tx.get(k)}
         m["gecko_pool"] = top.get("address")
+        m["gecko_txns"] = {k: tx.get(k) for k in ("m5", "m15", "m30", "h1") if tx.get(k)}
         if not main:
             m["price_usd"] = dp(fnum(top.get("base_token_price_usd")), src)
             m["mcap"] = dp(fnum(top.get("market_cap_usd")), src)
@@ -103,7 +104,10 @@ async def run_market(ctx) -> None:
             sigs = await svc.rpc.signatures(curve["address"], 300)
             now = time.time()
             recent = [x for x in sigs if x.get("blockTime") and now - x["blockTime"] <= 300]
-            act = {"tx_per_min_5m": len(recent) / 5, "source": "RPC Solana (transactions de la bonding curve)"}
+            recent20 = [x for x in sigs if x.get("blockTime") and now - x["blockTime"] <= 1200]
+            act = {"tx_per_min_5m": len(recent) / 5, "tx_per_min_20m": len(recent20) / 20,
+                   "tx_20m_is_minimum": len(sigs) >= 300 and len(recent20) == len(sigs),
+                   "source": "RPC Solana (transactions de la bonding curve)"}
             created = ((ctx.result.get("token") or {}).get("created_at") or {}).get("v")
             if created and curve.get("progress_pct") is not None and now - created > 30:
                 act["progress_per_min"] = curve["progress_pct"] / ((now - created) / 60)
@@ -204,7 +208,11 @@ def analyse_candles(c: list[list], supply: float | None) -> dict:
         ref = next((x[1] for x in c if x[0] >= cutoff), None)
         return 100 * (last / ref - 1) if ref else None
 
-    out["change"] = {"5m": change(5), "15m": change(15), "60m": change(60)}
+    out["change"] = {"5m": change(5), "15m": change(15), "20m": change(20), "60m": change(60)}
+    if len(vols) >= 40:
+        v20, prev20 = sum(vols[-20:]), sum(vols[-40:-20])
+        out["volume_20m"] = v20
+        out["volume_20m_trend"] = (v20 / prev20) if prev20 else None
     hi = max(x[2] for x in c)
     out["high_window"] = hi
     out["drawdown_from_high_pct"] = 100 * (last / hi - 1) if hi else None

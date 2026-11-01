@@ -5,10 +5,12 @@ import { copyText } from "../lib/native";
 import { Badge, Button, Card, Spinner, Stat, Tabs, Tone } from "../components/ui";
 import * as T from "./AnalysisTabs";
 import ScalpCard from "../components/ScalpCard";
+import { isTech } from "../lib/edition";
 
 const TABS = [
   { id: "overview", label: "OVERVIEW" }, { id: "onchain", label: "ON-CHAIN" }, { id: "holders", label: "HOLDERS" },
   { id: "developer", label: "DEVELOPER" }, { id: "social", label: "SOCIAL" }, { id: "narrative", label: "NARRATIVE" },
+  { id: "originality", label: "ORIGINALITÉ", tech: true }, { id: "news", label: "NEWS & FACT-CHECK", tech: true },
 { id: "smart", label: "SMART MONEY" }, { id: "risk", label: "RISK ANALYSIS" },
   { id: "ai", label: "AI VERDICT" },
 ];
@@ -57,6 +59,7 @@ export default function Analysis({ id, compact, onBack, onReanalyze }: { id: num
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="truncate text-[15px] font-bold">{tok.name || "Token"}</span>
               <span className="text-ink2">${tok.symbol || "?"}</span>
+              {isTech() && d.mode && <Badge tone="muted" icon={false} title={(d.mode.reasons || []).join("\n")}>{d.mode.value.toUpperCase()}</Badge>}
               {lp && <Badge tone={lp.status === "vérifié on-chain" ? "info" : "muted"} title={(lp.evidence || []).join("\n")}>{lp.label}{lp.status !== "vérifié on-chain" ? " (non vérifié)" : ""}</Badge>}
             </div>
             <button className="selectable mt-0.5 font-mono text-[11px] text-muted hover:text-ink2" onClick={() => copyText(d.mint)} title="Copier l'adresse">
@@ -90,7 +93,7 @@ export default function Analysis({ id, compact, onBack, onReanalyze }: { id: num
 
       {showDetails && (
         <div>
-          <Tabs tabs={TABS.map((t) => ({ ...t, dot: tabDot(t.id, d) }))} active={tab} onChange={setTab} />
+          <Tabs tabs={TABS.filter((t: any) => !t.tech || isTech()).map((t) => ({ ...t, dot: tabDot(t.id, d) }))} active={tab} onChange={setTab} />
           <div className="pt-2.5">
             {tab === "overview" && <T.Overview d={d} />}
             {tab === "onchain" && <T.OnChain d={d} />}
@@ -98,6 +101,8 @@ export default function Analysis({ id, compact, onBack, onReanalyze }: { id: num
             {tab === "developer" && <T.Developer d={d} />}
             {tab === "social" && <T.Social d={d} />}
             {tab === "narrative" && <T.Narrative d={d} />}
+            {tab === "news" && <T.News d={d} />}
+            {tab === "originality" && <T.Originality d={d} />}
             {tab === "smart" && <T.Smart d={d} />}
             {tab === "risk" && <T.Risk d={d} />}
             {tab === "ai" && <T.AIVerdict d={d} />}
@@ -110,7 +115,7 @@ export default function Analysis({ id, compact, onBack, onReanalyze }: { id: num
 
 function tabDot(id: string, d: any): Tone | undefined {
   const mod: Record<string, string[]> = { onchain: ["security", "liquidity", "market"], holders: ["holders", "clusters"], developer: ["developer"],
-    social: ["social"], narrative: ["narrative"], smart: ["smart_money"] };
+    social: ["social", "project"], narrative: ["narrative"], news: ["factcheck"], originality: ["originality"], smart: ["smart_money"] };
   const ms = (mod[id] || []).map((k) => d.modules?.[k]?.status);
   if (ms.some((s) => s === "en cours")) return "muted";
   if (ms.some((s) => s === "erreur" || s === "délai dépassé")) return "warn";

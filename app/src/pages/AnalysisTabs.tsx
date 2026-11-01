@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { BarChart, HBars } from "../components/charts";
-import { Badge, Card, Collapse, Empty, Link, Row, Spinner, Src, Stat, riskTone, socialTone } from "../components/ui";
+import { Badge, Card, Collapse, Empty, Link, Row, Spinner, Src, Stat, claimTone, riskTone, socialTone } from "../components/ui";
+import { isTech } from "../lib/edition";
 import { age, dateTime, num, pct, price, scoreTone, short, usd, v } from "../lib/format";
 
 const S1 = "var(--color-series1)", S2 = "var(--color-series2)";
@@ -20,7 +21,7 @@ function Pending({ d, mod, children }: { d: any; mod: string | string[]; childre
 }
 
 function SubScores({ sc }: { sc: any }) {
-  const order = ["onchain", "momentum", "social", "narrative", "smart_money"];
+  const order = isTech() ? ["onchain", "credibility", "narrative", "momentum", "social"] : ["onchain", "momentum", "social", "narrative", "smart_money"];
   return (
     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
       {order.map((k) => {
@@ -273,9 +274,9 @@ const PLAT: Record<string, string> = { x: "X / Twitter", telegram: "Telegram", d
   instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", medium: "Medium", reddit: "Reddit" };
 
 export function Social({ d }: { d: any }) {
-  const S = d.social || {};
+  const S = d.social || {}, P = d.project || {};
   return (
-    <Pending d={d} mod="social">
+    <Pending d={d} mod={isTech() ? ["social", "project"] : "social"}>
       <div className="space-y-2.5">
         {S.score && <Card title="Score social" right={<Badge tone={scoreTone(S.score.score) as any}>{S.score.score}/10 · confiance {Math.round(S.score.confidence * 100)}%</Badge>}>
           <div className="text-[12px] text-ink2">{S.score.reasons.join(" · ")}</div>
@@ -296,6 +297,25 @@ export function Social({ d }: { d: any }) {
           </div>
         </Card>
         <Card title="Limites de la vérification"><div className="text-[11px] text-muted">{(S.limitations || []).map((l: string, i: number) => <div key={i}>• {l}</div>)}</div></Card>
+        {isTech() && (
+        <Card title="Crédibilité du projet" right={P.score && <Badge tone={scoreTone(P.score.score) as any}>{P.score.score}/10</Badge>}>
+            {P.has_site === false ? <div className="text-[12px] text-muted">Aucun site web analysable.</div> : (
+              <div className="grid grid-cols-2 gap-x-4 text-[12px] sm:grid-cols-3">
+                {[["Documentation", P.has_docs], ["Page équipe", P.team_page], ["Roadmap", P.roadmap], ["Produit décrit", P.product_signals],
+                  ["Tokenomics", P.tokenomics], ["GitHub actif", P.github_active]].map(([k, val]: any) => (
+                  <Row key={k} k={k}>{val ? <span className="text-good">oui</span> : <span className="text-muted">non</span>}</Row>
+                ))}
+              </div>
+            )}
+            {P.note && <div className="mt-1 text-[11px] text-muted">{P.note}</div>}
+          </Card>
+        )}
+        {isTech() && P.github && !P.github.error && (
+          <Card title="Code (GitHub)" right={<Badge tone={P.github.fork ? "bad" : P.github.active ? "good" : "warn"}>{P.github.fork ? "copie (fork)" : P.github.active ? "actif" : "inactif"}</Badge>}>
+            <div className="text-[12px]"><Link href={P.github.url || "#"}>{P.github.repo}</Link> · {P.github.language || "—"} · {P.github.stars ?? 0} étoiles</div>
+            <div className="text-[11px] text-muted">Créé le {String(P.github.created_at).slice(0, 10)} · dernier commit {String(P.github.pushed_at).slice(0, 10)}{P.github.fork ? ` · copie de ${P.github.parent}` : ""}{P.github.created_for_launch ? " · créé au moment du lancement" : ""}</div>
+          </Card>
+        )}
       </div>
     </Pending>
   );
@@ -318,6 +338,69 @@ export function Narrative({ d }: { d: any }) {
           </Card>
         ))}
         {N.competitors && !N.competitors.error && <Card title="Concurrence (même nom / ticker)"><div className="text-[12px] text-ink2">{N.competitors.count} homonyme(s), dont {N.competitors.older_count} plus ancien(s) et {N.competitors.bigger_count} plus gros.</div></Card>}
+      </div>
+    </Pending>
+  );
+}
+
+export function News({ d }: { d: any }) {
+  const F = d.factcheck || {};
+  return (
+    <Pending d={d} mod="factcheck">
+      <div className="space-y-2.5">
+        {F.note && <Empty>{F.note}</Empty>}
+        {(F.claims || []).map((c: any, i: number) => (
+          <Card key={i} title={<span className="normal-case tracking-normal">Affirmation {i + 1}</span>} right={<Badge tone={claimTone(c.status)}>{c.status}</Badge>}>
+            <div className="selectable text-[12px] italic text-ink">« {c.text} »</div>
+            <div className="mt-1 text-[11px] text-muted">Origine : {c.origin} · extraite par {c.extracted_by}{c.entity ? ` · entité : ${c.entity}` : ""} · confiance {Math.round(c.confidence * 100)}%</div>
+            {c.reason && <div className="text-[11px] text-muted">{c.reason}</div>}
+            {c.sources.length > 0 && <div className="mt-1 space-y-0.5">{c.sources.map((s: any, k: number) => <div key={k} className="text-[12px]">• <Link href={s.url}>{s.title}</Link> <span className="text-muted">({s.domain})</span></div>)}</div>}
+            {c.note && <div className="mt-1 text-[10px] text-muted">{c.note}</div>}
+          </Card>
+        ))}
+        {F.method && <div className="text-[11px] text-muted">{F.method}</div>}
+      </div>
+    </Pending>
+  );
+}
+
+export function Originality({ d }: { d: any }) {
+  const O = d.originality || {};
+  const tone = O.verdict === "originale" ? "good" : O.verdict === "copie probable" ? "bad" : "warn";
+  return (
+    <Pending d={d} mod="originality">
+      <div className="space-y-2.5">
+        <Card title="Originalité" right={O.verdict && <Badge tone={tone as any}>{O.verdict} · {O.score}/10</Badge>}>
+          {O.unavailable ? <div className="text-[12px] text-muted">{O.unavailable}</div> :
+            (O.reasons || []).map((x: string, i: number) => <div key={i} className="text-[12px] text-ink2">• {x}</div>)}
+          {O.keywords?.length > 0 && <div className="mt-1 text-[11px] text-muted">Mots-clés du concept : {O.keywords.join(", ")}</div>}
+          {O.brand && <div className="text-[11px] text-warn">Marque reprise dans le nom : {O.brand}</div>}
+        </Card>
+        <Card title={`Tokens Solana au concept similaire (${O.similar_recent_7d ?? 0} lancés cette semaine)`}>
+          {(O.similar_tokens || []).length === 0 ? <div className="text-[12px] text-muted">Aucun trouvé.</div> :
+            O.similar_tokens.map((t: any) => (
+              <div key={t.mint} className="flex justify-between border-b border-line/60 py-1 text-[12px] last:border-0">
+                <span>${t.symbol} <span className="text-muted">{t.name} · « {t.keyword} »</span></span>
+                <span className="text-muted">{usd(t.mcap)} · {age(t.created_at)}</span>
+              </div>))}
+        </Card>
+        <Card title="Même nom / ticker">
+          {(O.homonyms || []).length === 0 ? <div className="text-[12px] text-muted">Aucun homonyme.</div> :
+            O.homonyms.map((t: any) => (
+              <div key={t.mint} className="flex justify-between border-b border-line/60 py-1 text-[12px] last:border-0">
+                <span>${t.symbol} <span className="text-muted">{t.name} · {short(t.mint)}</span></span>
+                <span className="text-muted">{usd(t.mcap)} · {age(t.created_at)}</span>
+              </div>))}
+        </Card>
+        <Card title="Projets open source similaires (GitHub)">
+          {(O.similar_repos || []).length === 0 ? <div className="text-[12px] text-muted">{O.similar_repos_error ? `Recherche indisponible : ${O.similar_repos_error}` : "Aucun projet similaire trouvé."}</div> :
+            O.similar_repos.map((x: any) => (
+              <div key={x.repo} className="border-b border-line/60 py-1 text-[12px] last:border-0">
+                <Link href={x.url}>{x.repo}</Link> <span className="text-muted">· {x.stars} étoiles · créé {String(x.created_at).slice(0, 10)}</span>
+                {x.description && <div className="text-[11px] text-muted">{x.description}</div>}
+              </div>))}
+        </Card>
+        {O.method && <div className="text-[11px] text-muted">{O.method} Ce sont des indices : un concept existant n'interdit pas un bon projet.</div>}
       </div>
     </Pending>
   );

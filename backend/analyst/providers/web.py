@@ -155,8 +155,38 @@ class Web:
                 return {"not_found": True}
             raise
         keys = ("created_at", "updated_at", "pushed_at", "stargazers_count", "forks_count", "public_repos",
-                "followers", "description", "archived", "fork")
-        return {k: d.get(k) for k in keys if k in d}
+                "followers", "description", "archived", "fork", "size", "language", "full_name", "html_url")
+        out = {k: d.get(k) for k in keys if k in d}
+        if d.get("parent"):
+            out["parent"] = d["parent"].get("full_name")
+        return out
+
+    async def github_search(self, query: str, token: str | None = None, limit: int = 5) -> list[dict]:
+        headers = {"Accept": "application/vnd.github+json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        d = await self.http.get_json("github", "https://api.github.com/search/repositories",
+                                     params={"q": query, "sort": "stars", "order": "desc", "per_page": limit},
+                                     headers=headers, timeout=6)
+        return [{"repo": i.get("full_name"), "url": i.get("html_url"), "stars": i.get("stargazers_count"),
+                 "description": (i.get("description") or "")[:200], "created_at": i.get("created_at"),
+                 "fork": i.get("fork")} for i in (d or {}).get("items") or []]
+
+    async def github_top_repo(self, owner: str, token: str | None = None) -> dict | None:
+        """Pour un lien vers un compte/organisation : le dépôt le plus récemment modifié."""
+        headers = {"Accept": "application/vnd.github+json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        for kind in ("orgs", "users"):
+            try:
+                repos = await self.http.get_json("github", f"https://api.github.com/{kind}/{owner}/repos",
+                                                 params={"sort": "pushed", "per_page": 5}, headers=headers, timeout=6)
+            except ProviderError:
+                continue
+            if isinstance(repos, list) and repos:
+                best = max(repos, key=lambda r: (not r.get("fork"), r.get("pushed_at") or ""))
+                return await self.github(owner, best["name"], token)
+        return None
 
     async def metadata_json(self, uri: str) -> dict | None:
         if not uri:

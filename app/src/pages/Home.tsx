@@ -4,6 +4,7 @@ import { age, scoreTone, short, verdictTone } from "../lib/format";
 import { MINT_RE, extractMint } from "../lib/mint";
 import { readClipboard } from "../lib/native";
 import { Badge, Button, Tone } from "../components/ui";
+import { appFullName, isTech } from "../lib/edition";
 
 export default function Home({ onAnalyze, go, health, input, setInput, error, setError, busy }:
   { onAnalyze: (mint: string) => void; go: (p: string, arg?: any) => void; health: any; input: string; setInput: (s: string) => void;
@@ -29,9 +30,9 @@ export default function Home({ onAnalyze, go, health, input, setInput, error, se
       <div className="flex items-center gap-2.5">
         <Logo />
         <div>
-          <div className="text-[15px] font-bold leading-tight">Solana AI Desktop Analyst</div>
+          <div className="text-[15px] font-bold leading-tight">{appFullName()}</div>
           <div className="text-[11px] text-muted">Analyse à la demande · lecture seule · aucun achat automatique</div>
-          <div className="mt-0.5"><Badge tone="info" icon={false}>SCALP</Badge></div>
+          <div className="mt-0.5">{isTech() ? <span className="rounded-md border border-[#9085e9]/50 bg-[#9085e9]/15 px-1.5 py-0.5 text-[11px] font-semibold text-[#b3abf2]">TECH · projets</span> : <Badge tone="info" icon={false}>SCALP</Badge>}</div>
         </div>
       </div>
 
@@ -87,6 +88,14 @@ function StatusLine({ label, tone, text }: { label: string; tone: Tone; text: st
 }
 
 export function Logo({ size = 30 }: { size?: number }) {
+  if (isTech()) return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-label="logo">
+      <rect width="32" height="32" rx="8" fill="#17142a" stroke="#2e2850" />
+      <rect x="9" y="9" width="14" height="14" rx="2.5" fill="none" stroke="#9085e9" strokeWidth="2" />
+      <rect x="13" y="13" width="6" height="6" rx="1" fill="#9085e9" />
+      <path d="M12 5v4M16 5v4M20 5v4M12 23v4M16 23v4M20 23v4M5 12h4M5 16h4M5 20h4M23 12h4M23 16h4M23 20h4" stroke="#9085e9" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-label="logo">
       <rect width="32" height="32" rx="8" fill="#14171c" stroke="#262b33" />

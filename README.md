@@ -16,7 +16,7 @@ et rend une **note sur 10**, un **verdict** (BUY SETUP / WATCH / AVOID) et une a
 ### Option A — installeur (recommandé)
 1. Mets ce dossier sur un dépôt GitHub (privé possible).
 2. Onglet **Actions** → workflow **build** → *Run workflow* (gratuit). Ou crée un tag `v0.1.0`.
-3. Télécharge l'artefact `installeur-windows-latest` → lance le `.exe` (NSIS) ou le `.msi`.
+3. Télécharge l'artefact `installeur-scalp-windows-latest` ou `installeur-tech-windows-latest` → lance le `.exe` (NSIS).
 
 L'installeur contient tout (moteur d'analyse compris) : **pas besoin d'installer Python**.
 
@@ -54,7 +54,23 @@ Les clés sont stockées dans le **Gestionnaire d'identification Windows** (chif
 Pages : Historique (filtres + comparaison), Narratives mondiales (top 10), Smart money (wallets suivis),
 Performance (backtesting), Paramètres.
 
-## Logiciel 100 % scalp (v0.3)
+## Deux applications (v0.4)
+
+| | **Solana AI Analyst** (icône bleue) | **Solana Tech Analyst** (icône violette) |
+|---|---|---|
+| Pour | memecoins en scalp (minutes) | projets tech / IA tenus de quelques minutes à quelques heures |
+| Raccourci | Ctrl+Shift+Espace | Ctrl+Alt+Espace |
+| Pondérations | sécurité 35 · momentum 5 min 40 · narrative 10 · social 10 · smart money 5 | sécurité 25 · crédibilité 25 · narrative 20 · momentum 20 min 15 · social 15 |
+| Checklist | zone de MC, pièges, bundle, concentration, dev, momentum 5 min, coût, social | pièges, bundle, concentration, dev, coût, social, **produit réel (GitHub)**, **site & docs**, **affirmations vérifiées**, **narrative tech**, **momentum 20 min**, **originalité** |
+| Plan par défaut | +40 % / −20 % · 0,25 SOL | +50 % / −25 % · 0,25 SOL |
+| Rejeu des résultats | 1 h | 6 h |
+
+Les deux s'installent côte à côte (identifiants, historiques et pages Performance séparés) ; la clé Helius est partagée.
+Édition tech — **Originalité** : homonymes (un token plus ancien et bien plus gros au même nom = copycat → bloquant),
+tokens Solana au concept similaire lancés dans la semaine, projets GitHub établis faisant la même chose, marque connue
+reprise dans le nom, code copié (fork). **GitHub** : dépôt actif, copie, dépôt créé au moment du lancement.
+
+## Édition scalp (v0.3)
 
 Un seul mode, optimisé pour le scalp de memecoins (entrée 6–15 k$ de market cap, sortie +30–50 %, 0,25 SOL) :
 - **Pondérations** : on-chain & sécurité 35 %, momentum 5 min 40 %, narrative 10 %, social 10 %, smart money 5 %.
@@ -122,7 +138,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 35 tests : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 39 tests (dont 3 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

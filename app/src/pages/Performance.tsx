@@ -66,8 +66,8 @@ function ScalpPerf({ sp }: { sp: any }) {
     </table>
   );
   return (
-    <Card title="Mes résultats scalp (objectif avant stop, 1 h)">
-      {!sp.observations ? <Empty>Aucun trade rejoué pour l'instant ({sp.pending} en attente). Chaque analyse est rejouée 1 h après, tant que l'application est ouverte.</Empty> : (
+    <Card title="Mes résultats (objectif touché avant le stop)">
+      {!sp.observations ? <Empty>Aucun trade rejoué pour l'instant ({sp.pending} en attente). Chaque analyse est rejouée à la fin de la fenêtre de suivi (Paramètres), tant que l'application est ouverte.</Empty> : (
         <div className="space-y-2">
           <T data={{ "Toutes les analyses": sp.overall }} />
           {Object.keys(sp.by_decision).length > 0 && <><div className="text-[11px] text-muted">Par décision de la checklist</div><T data={sp.by_decision} /></>}

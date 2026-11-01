@@ -11,6 +11,7 @@ import Wallets from "./pages/Wallets";
 import Performance from "./pages/Performance";
 import Settings from "./pages/Settings";
 import { Spinner } from "./components/ui";
+import { setEdition } from "./lib/edition";
 
 type Page = "home" | "analysis" | "history" | "narratives" | "wallets" | "performance" | "settings";
 
@@ -41,6 +42,8 @@ export default function App() {
     (async () => {
       await initBackend();
       if (!(await waitForBackend())) { setReady("fail"); return; }
+      try { setEdition((await api("/api/health")).edition); } catch {}
+      document.title = (await import("./lib/edition")).appFullName();
       const s = (await api("/api/settings")).settings;
       setSettings(s); setCompact(!!s.compact_mode);
       setAlwaysOnTop(!!s.always_on_top);

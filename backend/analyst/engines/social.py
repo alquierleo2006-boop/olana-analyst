@@ -298,6 +298,7 @@ async def run_project(ctx) -> None:
     site = await ctx.need("site", timeout=12) or {}
     social = await ctx.need("social", timeout=2) or {}
     if not site.get("text"):
+        ctx.provide("github", None)
         P["has_site"] = False
         P["score"] = {"score": 1.5, "confidence": 0.6, "reasons": ["aucun site web analysable"], "status": ESTIMATED}
         return
@@ -310,14 +311,9 @@ async def run_project(ctx) -> None:
                                                    "sdk", "api ", "protocol"))
     P["tokenomics"] = "tokenomics" in text
     P["word_count"] = len(text.split())
-    gh = next((a for a in (social.get("accounts") or {}).get("github", []) if a.get("github")), None)
-    P["github_active"] = False
-    if gh and gh["github"].get("pushed_at"):
-        try:
-            pushed = datetime.fromisoformat(gh["github"]["pushed_at"].replace("Z", "+00:00")).timestamp()
-            P["github_active"] = time.time() - pushed < 90 * 86400
-        except ValueError:
-            pass
+    P["github"] = await analyse_github(ctx, social, links)
+    ctx.provide("github", P["github"])
+    P["github_active"] = bool(P["github"] and P["github"].get("active"))
     reasons, score = [], 3.0
     for key, pts, label in (("has_docs", 1.5, "documentation"), ("team_page", 1.0, "page équipe"),
                             ("roadmap", 0.5, "roadmap"), ("product_signals", 1.0, "produit / application décrit"),
@@ -332,9 +328,63 @@ async def run_project(ctx) -> None:
             score += 1.0; reasons.append(f"domaine ancien ({age:.0f} j)")
     if P["word_count"] < 150:
         score -= 1.0; reasons.append("site très pauvre en contenu")
+    g = P["github"] or {}
+    if g.get("fork"):
+        score -= 2.5; reasons.append(f"le GitHub est une copie (fork) de {g.get('parent') or 'un autre projet'}")
+    if g.get("created_for_launch"):
+        score -= 1.0; reasons.append("dépôt GitHub créé au moment du lancement du token")
+    if g.get("stars") and g["stars"] >= 50:
+        score += 0.5; reasons.append(f"{g['stars']} étoiles GitHub")
     P["note"] = "Un site web ne suffit pas à rendre un projet sérieux : ces éléments sont des indices de sérieux."
     P["score"] = {"score": round(max(0, min(10, score)), 1), "confidence": 0.55 if age is not None else 0.45,
                   "reasons": reasons, "status": ESTIMATED}
+
+
+def _ts(iso: str | None) -> float | None:
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+async def analyse_github(ctx, social: dict, site_links: list[str]) -> dict | None:
+    """Dépôt GitHub du projet (déclaré ou lié depuis le site) : activité réelle, copie, création opportuniste."""
+    from ..providers.web import classify_link
+    svc = ctx.svc
+    cands: list[tuple[str, str | None]] = []
+    for a in (social.get("accounts") or {}).get("github", []):
+        if a.get("owner"):
+            cands.append((a["owner"], a.get("repo")))
+    for l in site_links:
+        if "github.com/" in l:
+            plat, det = classify_link(l)
+            if plat == "github" and det.get("owner") and det["owner"] not in ("features", "sponsors", "orgs", "about"):
+                cands.append((det["owner"], det.get("repo")))
+    cands = list(dict.fromkeys(cands))
+    if not cands:
+        return None
+    token = svc.secrets.get("github_token")
+    for owner, repo in cands[:2]:
+        try:
+            info = await (svc.web.github(owner, repo, token) if repo else svc.web.github_top_repo(owner, token))
+        except Exception:
+            info = None
+        if not info or info.get("not_found") or "pushed_at" not in info:
+            continue
+        pushed, created = _ts(info.get("pushed_at")), _ts(info.get("created_at"))
+        tok_created = ((ctx.result.get("token") or {}).get("created_at") or {}).get("v")
+        out = {"repo": info.get("full_name") or f"{owner}/{repo}", "url": info.get("html_url"),
+               "stars": info.get("stargazers_count"), "fork": bool(info.get("fork")), "parent": info.get("parent"),
+               "language": info.get("language"), "created_at": info.get("created_at"), "pushed_at": info.get("pushed_at"),
+               "archived": info.get("archived"), "size_kb": info.get("size"),
+               "active": bool(pushed and time.time() - pushed < 30 * 86400),
+               "created_for_launch": bool(created and tok_created and abs(created - tok_created) < 3 * 86400
+                                          and (info.get("size") or 0) < 500),
+               "source": "API publique GitHub"}
+        return out
+    return {"error": "dépôt GitHub introuvable ou inaccessible"}
 
 
 # ------------------------------------------------------------------ fact-checking

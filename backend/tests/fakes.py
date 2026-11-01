@@ -171,7 +171,10 @@ class Fake:
                          "socials": [{"type": "twitter", "url": "https://x.com/robocatsol"},
                                      {"type": "telegram", "url": "https://t.me/robocatsol"}]}}])
         if "dexscreener.com/latest/dex/search" in u:
-            return httpx.Response(200, json={"pairs": [
+            extra = [{"chainId": "solana", "baseToken": {"address": "Orig111", "symbol": "RCAT", "name": "Robo Cat"},
+                      "pairCreatedAt": (NOW - 40 * 86400) * 1000, "marketCap": 42_000_000, "volume": {"h24": 900000}}] \
+                if o.get("copycat") else []
+            return httpx.Response(200, json={"pairs": extra + [
                 {"chainId": "solana", "baseToken": {"address": "Other111", "symbol": "RCAT", "name": "Robo Cat"},
                  "pairCreatedAt": (NOW - 3600) * 1000, "marketCap": 1000, "volume": {"h24": 10}},
                 {"chainId": "solana", "baseToken": {"address": "Ai1", "symbol": "AGENT", "name": "AI Agent"},
@@ -216,7 +219,21 @@ class Fake:
         if "robocat.example" in u:
             return httpx.Response(200, text=f"<html><title>Robo Cat $RCAT</title><body>CA: {MINT} "
                                              '<a href="https://x.com/robocatsol">X</a> <a href="https://t.me/robocatsol">TG</a>'
+                                             '<a href="https://github.com/robocat/agent">Code</a> <a href="https://docs.robocat.example">Docs</a>'
                                              " Our team. Roadmap. " + "word " * 200 + "</body></html>")
+        if "api.github.com/search/repositories" in u:
+            return httpx.Response(200, json={"items": [
+                {"full_name": "elizaOS/eliza", "html_url": "https://github.com/elizaOS/eliza", "stargazers_count": 15000,
+                 "description": "Autonomous AI agents for everyone", "created_at": "2024-07-01T00:00:00Z", "fork": False},
+                {"full_name": "robocat/agent", "html_url": "https://github.com/robocat/agent", "stargazers_count": 120,
+                 "description": "Robo Cat agent", "created_at": "2025-06-01T00:00:00Z", "fork": False}]})
+        if "api.github.com/repos/robocat/agent" in u:
+            d = {"full_name": "robocat/agent", "html_url": "https://github.com/robocat/agent", "created_at": "2025-06-01T00:00:00Z",
+                 "pushed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(NOW - 3 * 86400)), "stargazers_count": 120,
+                 "fork": bool(o.get("gh_fork")), "size": 4200, "language": "TypeScript", "archived": False}
+            if o.get("gh_fork"):
+                d["parent"] = {"full_name": "famous/ai-agent"}
+            return httpx.Response(200, json=d)
         if "rdap.org" in u:
             return httpx.Response(200, json={"events": [{"eventAction": "registration",
                                                          "eventDate": "2026-10-30T10:00:00Z"}]})

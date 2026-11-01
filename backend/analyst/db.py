@@ -98,7 +98,8 @@ CREATE INDEX IF NOT EXISTS idx_perf_due ON historical_performance(status, due_at
 CREATE TABLE IF NOT EXISTS scalp_outcomes (
     analysis_id INTEGER PRIMARY KEY, due_at REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
     outcome TEXT, minutes REAL, entry_price REAL, max_gain_pct REAL, max_drawdown_pct REAL, final_change_pct REAL,
-    tp_pct REAL, sl_pct REAL, cost_pct REAL, pnl_pct REAL, score REAL, decision TEXT, evaluated_at REAL
+    tp_pct REAL, sl_pct REAL, cost_pct REAL, pnl_pct REAL, score REAL, decision TEXT, evaluated_at REAL,
+    window_s REAL
 );
 CREATE INDEX IF NOT EXISTS idx_scalp_due ON scalp_outcomes(status, due_at);
 
@@ -118,6 +119,10 @@ class DB:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(SCHEMA)
+        try:  # bases créées avant la v0.4
+            self.conn.execute("ALTER TABLE scalp_outcomes ADD COLUMN window_s REAL")
+        except sqlite3.OperationalError:
+            pass
 
     def execute(self, sql: str, params: tuple | list = ()) -> int:
         with self._lock:

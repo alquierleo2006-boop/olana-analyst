@@ -26,9 +26,18 @@ jobs:
           - os: windows-latest
             triple: x86_64-pc-windows-msvc
             ext: .exe
+            edition: scalp
+            conf: src-tauri/tauri.release.conf.json
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            ext: .exe
+            edition: tech
+            conf: src-tauri/tauri.tech.release.conf.json
           - os: macos-latest
             triple: aarch64-apple-darwin
             ext: ""
+            edition: scalp
+            conf: src-tauri/tauri.release.conf.json
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,11 +62,11 @@ jobs:
         working-directory: app
         run: |
           npm ci
-          npx tauri build --config src-tauri/tauri.release.conf.json
+          npx tauri build --config ${{ matrix.conf }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: installeur-${{ matrix.os }}
+          name: installeur-${{ matrix.edition }}-${{ matrix.os }}
           path: |
             app/src-tauri/target/release/bundle/nsis/*.exe
             app/src-tauri/target/release/bundle/msi/*.msi
