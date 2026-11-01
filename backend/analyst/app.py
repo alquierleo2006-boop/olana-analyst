@@ -123,7 +123,7 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
     async def health():
         s = st.settings.all()
         return {"version": __version__, "time": time.time(), "read_only": True,
-                "trading_mode": s.get("trading_mode"), "live_watches": len([w for w in st.live.watches.values() if not w.stopped]),
+                "live_watches": len([w for w in st.live.watches.values() if not w.stopped]),
                 "llm": {"available": st.svc.llm.available, "provider": s["llm"]["provider"]},
                 "helius": bool(st.secrets.get("helius_api_key")),
                 "narrative_engine": st.narratives.status, "tracker": st.tracker.status,
@@ -285,7 +285,7 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
         new = st.settings.update(patch)
         st.build()
         from .config import active_weights
-        st.db.current_model_version({"mode": new.get("trading_mode"), **active_weights(new)}, new["thresholds"])
+        st.db.current_model_version(active_weights(new), new["thresholds"])
         return {"settings": new}
 
     @app.put("/api/secrets/{name}", dependencies=A)

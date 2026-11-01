@@ -53,26 +53,20 @@ def test_alert_rules_fire_once():
     assert [x["code"] for x in a1] == ["REVERSAL"] and a2 == []
 
 
-def test_scalp_mode_weights_and_auto_watch():
+def test_scalp_only_weights_and_auto_watch():
     fake = Fake()
     app = create_app(transport=fake.transport(), db_path=":memory:", start_background=False)
     with TestClient(app) as c:
-        assert c.get("/api/settings").json()["settings"]["trading_mode"] == "scalp"
+        settings = c.get("/api/settings").json()["settings"]
+        assert "trading_mode" not in settings and "mode_weights" not in settings
         aid = c.post("/api/analyze", json={"mint": MINT}).json()["analysis_id"]
         st = app.state.st
         c.portal.call(st.analyzer.live[aid].done.wait)
         r = c.get(f"/api/analyses/{aid}").json()
-        assert r["scores"]["trading_mode"] == "scalp"
         assert r["scores"]["categories"]["momentum"]["weight"] == 40
         assert r["live_watch"]["active"] is True
-        lst = c.get("/api/live").json()
-        assert lst and lst[0]["mint"] == MINT
         assert c.delete(f"/api/live/{MINT}").json()["ok"]
-        c.put("/api/settings", json={"trading_mode": "hold"})
-        aid2 = c.post("/api/analyze", json={"mint": MINT}).json()["analysis_id"]
-        c.portal.call(st.analyzer.live[aid2].done.wait)
-        r2 = c.get(f"/api/analyses/{aid2}").json()
-        assert r2["scores"]["categories"]["credibility"]["weight"] == 25
+        assert st.db.one("SELECT COUNT(*) c FROM scalp_outcomes")["c"] == 1
 
 
 def test_auto_targets_use_first_live_value():

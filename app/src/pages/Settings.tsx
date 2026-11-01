@@ -19,8 +19,8 @@ const LLM_PRESETS: Record<string, { base_url: string; model: string }> = {
   gemini: { base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash" },
   openrouter: { base_url: "https://openrouter.ai/api/v1", model: "meta-llama/llama-3.3-70b-instruct:free" },
 };
-const WEIGHTS: [string, string][] = [["onchain", "On-chain & sécurité"], ["momentum", "Momentum & marché"], ["narrative", "Narrative & actualités"],
-  ["social", "Réseaux sociaux"], ["credibility", "Qualité & crédibilité"], ["smart_money", "Smart money"]];
+const WEIGHTS: [string, string][] = [["onchain", "On-chain & sécurité"], ["momentum", "Momentum (5 min)"], ["narrative", "Narrative & actualités"],
+  ["social", "Réseaux sociaux"], ["smart_money", "Smart money"]];
 
 export default function Settings({ back, onSaved }: { back: () => void; onSaved: (s: any) => void }) {
   const [s, setS] = useState<any>(null);
@@ -44,24 +44,16 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
     setMsg(err ? `Enregistré, mais raccourci refusé : ${err}` : "Paramètres enregistrés. Une modification des pondérations crée une nouvelle version du modèle.");
   };
   const inp = "rounded-md border border-line bg-panel2 px-2 py-1 text-[12px] outline-none focus:border-info/60";
-  const mw = s.trading_mode !== "standard" && s.mode_weights?.[s.trading_mode];
-  const W = mw || s.weights;
-  const setW = (k: string, val: number) => mw ? up({ mode_weights: { ...s.mode_weights, [s.trading_mode]: { ...mw, [k]: val } } }) : up({ weights: { ...s.weights, [k]: val } });
+  const W = s.weights;
+  const setW = (k: string, val: number) => up({ weights: { ...s.weights, [k]: val } });
   const totalW = WEIGHTS.reduce((a, [k]) => a + (Number(W[k]) || 0), 0);
   return (
     <div className="space-y-2.5 p-3">
       <div className="flex items-center justify-between"><Button onClick={back}>← Accueil</Button><h2 className="text-[13px] font-bold">PARAMÈTRES</h2><Button kind="primary" onClick={save}>Enregistrer</Button></div>
       {msg && <div className="text-[12px] text-info">{msg}</div>}
-      <Card title="Style de trading">
-        <div className="grid grid-cols-3 gap-1.5">
-          {[["scalp", "SCALP", "minutes : momentum + sécurité, checklist d'entrée"], ["standard", "STANDARD", "heures : équilibré"], ["hold", "HOLD", "jours : crédibilité, holders, narrative"]].map(([k, l, d]) => (
-            <button key={k} onClick={() => up({ trading_mode: k })} className={`rounded-md border p-2 text-left ${s.trading_mode === k ? "border-info bg-info/10" : "border-line hover:bg-panel2"}`}>
-              <div className="text-[12px] font-bold">{l}</div><div className="text-[10px] text-muted">{d}</div>
-            </button>
-          ))}
-        </div>
-        {s.trading_mode === "scalp" && (
-          <div className="mt-2">
+      <Card title="Ma stratégie scalp">
+        {(
+          <div>
             <F k="Zone d'entrée : market cap min ($)"><Num v={s.scalp.entry_mcap_min ?? 6000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_min: x } })} /></F>
             <F k="Zone d'entrée : market cap max ($)"><Num v={s.scalp.entry_mcap_max ?? 15000} step={1000} set={(x) => up({ scalp: { ...s.scalp, entry_mcap_max: x } })} /></F>
             <F k="Objectif de sortie (+%)"><Num v={s.scalp.take_profit_pct ?? 40} step={5} set={(x) => up({ scalp: { ...s.scalp, take_profit_pct: x } })} /></F>
@@ -108,7 +100,7 @@ export default function Settings({ back, onSaved }: { back: () => void; onSaved:
         </>}
         <div className="text-[11px] text-muted">L'IA rédige la conclusion et extrait les affirmations à vérifier. Elle ne calcule jamais le score et reçoit les contenus externes comme données non fiables.</div>
       </Card>
-      <Card title={<>Pondérations du mode {String(s.trading_mode).toUpperCase()} {totalW !== 100 && <span className="text-warn">(total {totalW}% — normalisé automatiquement)</span>}</>}>
+      <Card title={<>Pondérations du score {totalW !== 100 && <span className="text-warn">(total {totalW}% — normalisé automatiquement)</span>}</>}>
         {WEIGHTS.map(([k, label]) => (
           <F key={k} k={label}><input type="range" min={0} max={60} value={W[k]} onChange={(e) => setW(k, Number(e.target.value))} /><span className="num w-10 text-right">{W[k]}%</span></F>
         ))}

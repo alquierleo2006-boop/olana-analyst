@@ -95,6 +95,13 @@ CREATE TABLE IF NOT EXISTS historical_performance (
 );
 CREATE INDEX IF NOT EXISTS idx_perf_due ON historical_performance(status, due_at);
 
+CREATE TABLE IF NOT EXISTS scalp_outcomes (
+    analysis_id INTEGER PRIMARY KEY, due_at REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    outcome TEXT, minutes REAL, entry_price REAL, max_gain_pct REAL, max_drawdown_pct REAL, final_change_pct REAL,
+    tp_pct REAL, sl_pct REAL, cost_pct REAL, pnl_pct REAL, score REAL, decision TEXT, evaluated_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_scalp_due ON scalp_outcomes(status, due_at);
+
 CREATE TABLE IF NOT EXISTS api_providers (
     name TEXT PRIMARY KEY, status TEXT, last_ok REAL, last_error TEXT, last_latency_ms INTEGER,
     calls INTEGER DEFAULT 0, errors INTEGER DEFAULT 0

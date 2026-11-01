@@ -116,17 +116,6 @@ async def run_market(ctx) -> None:
         ctx.risk("élevé", "NO_MARKET", "Aucun marché identifié pour ce token", "Marché")
     ctx.provide("market", m)
 
-    # Bougies 1 minute (≈ 5 h) pour volume 1 min / 15 min, momentum et caractère organique.
-    pool = (m.get("main_pair") or {}).get("address") or m.get("gecko_pool")
-    if pool:
-        try:
-            candles = await svc.gecko.ohlcv(pool, "minute", 1, 300)
-            m["momentum"] = analyse_candles(candles, supply)
-            m["candles_1m"] = candles[-180:]
-            if candles:
-                m.setdefault("volume", {})["m1"] = dp(candles[-1][5], "GeckoTerminal (dernière bougie 1 min)")
-        except Exception as exc:
-            m["momentum"] = {"unavailable": f"Bougies indisponibles : {exc}"}
     m["organic"] = assess_organic(m)
     if m.get("mcap") and (m["mcap"].get("v") or 0) > 0:
         svc.db.execute("INSERT INTO market_snapshots(mint, ts, source, price_usd, mcap, fdv, liquidity, volume_24h)"
@@ -178,6 +167,26 @@ def presumed_curve(ctx, m: dict) -> bool:
     dex = ((m.get("main_pair") or {}).get("dex") or "").lower()
     on_amm = any(dex.startswith(d) for d in AMM_DEXES) and "launch" not in dex and "dbc" not in dex
     return hinted and (mcap is None or mcap < PRESUMED_CURVE_MAX_MCAP) and not on_amm
+
+
+async def run_momentum(ctx) -> None:
+    """Bougies 1 min (GeckoTerminal, limité à 1 requête / 2 s) : hors du chemin critique de la 1re fiche."""
+    m = await ctx.need("market", timeout=10)
+    if not m:
+        return
+    pool = (m.get("main_pair") or {}).get("address") or m.get("gecko_pool")
+    if not pool:
+        m["momentum"] = {"unavailable": "aucun pool connu"}
+        return
+    supply = ((ctx.result.get("token") or {}).get("supply") or {}).get("v")
+    try:
+        candles = await ctx.svc.gecko.ohlcv(pool, "minute", 1, 120)
+        m["momentum"] = analyse_candles(candles, supply)
+        if candles:
+            m.setdefault("volume", {})["m1"] = dp(candles[-1][5], "GeckoTerminal (dernière bougie 1 min)")
+    except Exception as exc:
+        m["momentum"] = {"unavailable": f"Bougies indisponibles : {exc}"}
+    m["organic"] = assess_organic(m)
 
 
 def analyse_candles(c: list[list], supply: float | None) -> dict:

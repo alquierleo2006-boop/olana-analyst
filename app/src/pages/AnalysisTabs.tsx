@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { BarChart, HBars } from "../components/charts";
-import { Badge, Card, Collapse, Empty, Link, Row, Spinner, Src, Stat, claimTone, riskTone, socialTone } from "../components/ui";
+import { Badge, Card, Collapse, Empty, Link, Row, Spinner, Src, Stat, riskTone, socialTone } from "../components/ui";
 import { age, dateTime, num, pct, price, scoreTone, short, usd, v } from "../lib/format";
 
 const S1 = "var(--color-series1)", S2 = "var(--color-series2)";
@@ -20,7 +20,7 @@ function Pending({ d, mod, children }: { d: any; mod: string | string[]; childre
 }
 
 function SubScores({ sc }: { sc: any }) {
-  const order = ["onchain", "momentum", "social", "narrative", "credibility", "smart_money"];
+  const order = ["onchain", "momentum", "social", "narrative", "smart_money"];
   return (
     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
       {order.map((k) => {
@@ -273,9 +273,9 @@ const PLAT: Record<string, string> = { x: "X / Twitter", telegram: "Telegram", d
   instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", medium: "Medium", reddit: "Reddit" };
 
 export function Social({ d }: { d: any }) {
-  const S = d.social || {}, P = d.project || {};
+  const S = d.social || {};
   return (
-    <Pending d={d} mod={["social", "project"]}>
+    <Pending d={d} mod="social">
       <div className="space-y-2.5">
         {S.score && <Card title="Score social" right={<Badge tone={scoreTone(S.score.score) as any}>{S.score.score}/10 · confiance {Math.round(S.score.confidence * 100)}%</Badge>}>
           <div className="text-[12px] text-ink2">{S.score.reasons.join(" · ")}</div>
@@ -296,17 +296,6 @@ export function Social({ d }: { d: any }) {
           </div>
         </Card>
         <Card title="Limites de la vérification"><div className="text-[11px] text-muted">{(S.limitations || []).map((l: string, i: number) => <div key={i}>• {l}</div>)}</div></Card>
-        <Card title="Crédibilité du projet" right={P.score && <Badge tone={scoreTone(P.score.score) as any}>{P.score.score}/10</Badge>}>
-          {P.has_site === false ? <div className="text-[12px] text-muted">Aucun site web analysable.</div> : (
-            <div className="grid grid-cols-2 gap-x-4 text-[12px] sm:grid-cols-3">
-              {[["Documentation", P.has_docs], ["Page équipe", P.team_page], ["Roadmap", P.roadmap], ["Produit décrit", P.product_signals],
-                ["Tokenomics", P.tokenomics], ["GitHub actif", P.github_active]].map(([k, val]: any) => (
-                <Row key={k} k={k}>{val ? <span className="text-good">oui</span> : <span className="text-muted">non</span>}</Row>
-              ))}
-            </div>
-          )}
-          {P.note && <div className="mt-1 text-[11px] text-muted">{P.note}</div>}
-        </Card>
       </div>
     </Pending>
   );
@@ -329,27 +318,6 @@ export function Narrative({ d }: { d: any }) {
           </Card>
         ))}
         {N.competitors && !N.competitors.error && <Card title="Concurrence (même nom / ticker)"><div className="text-[12px] text-ink2">{N.competitors.count} homonyme(s), dont {N.competitors.older_count} plus ancien(s) et {N.competitors.bigger_count} plus gros.</div></Card>}
-      </div>
-    </Pending>
-  );
-}
-
-export function News({ d }: { d: any }) {
-  const F = d.factcheck || {};
-  return (
-    <Pending d={d} mod="factcheck">
-      <div className="space-y-2.5">
-        {F.note && <Empty>{F.note}</Empty>}
-        {(F.claims || []).map((c: any, i: number) => (
-          <Card key={i} title={<span className="normal-case tracking-normal">Affirmation {i + 1}</span>} right={<Badge tone={claimTone(c.status)}>{c.status}</Badge>}>
-            <div className="selectable text-[12px] italic text-ink">« {c.text} »</div>
-            <div className="mt-1 text-[11px] text-muted">Origine : {c.origin} · extraite par {c.extracted_by}{c.entity ? ` · entité : ${c.entity}` : ""} · confiance {Math.round(c.confidence * 100)}%</div>
-            {c.reason && <div className="text-[11px] text-muted">{c.reason}</div>}
-            {c.sources.length > 0 && <div className="mt-1 space-y-0.5">{c.sources.map((s: any, k: number) => <div key={k} className="text-[12px]">• <Link href={s.url}>{s.title}</Link> <span className="text-muted">({s.domain})</span></div>)}</div>}
-            {c.note && <div className="mt-1 text-[10px] text-muted">{c.note}</div>}
-          </Card>
-        ))}
-        {F.method && <div className="text-[11px] text-muted">{F.method}</div>}
       </div>
     </Pending>
   );
@@ -407,7 +375,10 @@ export function AIVerdict({ d }: { d: any }) {
       <Card title="Probabilité estimée de hausse">
         {!P ? <Empty>Disponible à la fin de l'analyse.</Empty> : (
           <>
-            <div className="mb-1 text-[11px] text-muted">Définition : {P.definition}</div>
+            {P.scalp && <Row k={<b>{P.scalp.label}</b>}>{P.scalp.available
+              ? <span>{Math.round(P.scalp.probability * 100)}% <span className="text-muted">[IC95 {Math.round(P.scalp.ci95[0] * 100)}–{Math.round(P.scalp.ci95[1] * 100)}%] · {P.scalp.comparable_observations} obs.</span></span>
+              : <span className="text-warn">{P.scalp.message} <span className="text-muted">({P.scalp.observations} trades rejoués)</span></span>}</Row>}
+            <div className="mb-1 mt-2 text-[11px] text-muted">Autres horizons — définition : {P.definition}</div>
             {Object.entries(P.horizons).map(([h, x]: any) => (
               <Row key={h} k={h}>{x.available ? <span>{Math.round(x.probability * 100)}% <span className="text-muted">[IC95 {Math.round(x.ci95[0] * 100)}–{Math.round(x.ci95[1] * 100)}%] · {x.comparable_observations} obs. comparables</span></span>
                 : <span className="text-warn" title={x.detail || ""}>{x.message} <span className="text-muted">({x.observations} obs.)</span></span>}</Row>

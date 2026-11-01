@@ -12,9 +12,9 @@ from .engines import market, onchain, scoring, smartmoney, social, tracker
 from .engines.context import Ctx, InvalidAddress, TokenNotFound
 from .engines.narratives import run_narrative
 
+# Logiciel 100 % scalp : pas de fact-checking ni d'analyse de site (lents, poids nul en scalp).
 LEVEL1 = ["launchpad", "market", "security", "holders", "liquidity"]
-LEVEL2 = ["developer", "social", "clusters", "narrative", "smart_money"]
-LEVEL3 = ["project", "factcheck"]
+LEVEL2 = ["developer", "social", "clusters", "narrative", "smart_money", "momentum"]
 TIMEOUTS = {1: 15, 2: 30, 3: 35}
 FIRST_RESULT_TARGET_S = {"memecoin": 5, "projet": 15, "hybride": 15}
 SCALP_FIRST_RESULT_S = 3
@@ -62,8 +62,7 @@ class Analyzer:
             "liquidity": (1, market.run_liquidity), "developer": (2, onchain.run_developer),
             "social": (2, social.run_social), "clusters": (2, onchain.run_clusters),
             "narrative": (2, lambda c: run_narrative(c, self.narratives)),
-            "smart_money": (2, smartmoney.run_smart_money), "project": (3, social.run_project),
-            "factcheck": (3, social.run_factcheck),
+            "smart_money": (2, smartmoney.run_smart_money), "momentum": (2, market.run_momentum),
         }
 
     async def _run(self, an: Analysis) -> None:
@@ -105,8 +104,7 @@ class Analyzer:
                 first_sent.set()
 
         async def deadline():
-            scalp = settings.get("trading_mode") == "scalp"
-            await asyncio.sleep(SCALP_FIRST_RESULT_S if scalp else FIRST_RESULT_TARGET_S["memecoin"])
+            await asyncio.sleep(SCALP_FIRST_RESULT_S)
             if not first_sent.is_set():
                 self._first_result(an, t0, partial=True)
                 first_sent.set()
@@ -115,8 +113,8 @@ class Analyzer:
         await asyncio.gather(*[run_mod(n) for n in mods])
         dl.cancel()
 
-        r["mode"] = ident.classify_mode(r)
-        target = FIRST_RESULT_TARGET_S[r["mode"]["value"]]
+        r["mode"] = {"value": "memecoin", "certainty": 1.0, "reasons": ["logiciel dédié au scalp de memecoins"]}
+        target = SCALP_FIRST_RESULT_S
         r["timing"]["target_s"] = target
         r["timing"]["first_result_within_target"] = r["timing"]["first_result_ms"] <= target * 1000
         r["scores"] = scoring.compute(r, settings, final=True)
@@ -130,7 +128,7 @@ class Analyzer:
         r["finished_at"] = time.time()
         from .config import active_weights
         r["model_version_id"] = self.svc.db.current_model_version(
-            {"mode": settings.get("trading_mode"), **active_weights(settings)}, settings["thresholds"])
+            active_weights(settings), settings["thresholds"])
         if self.watcher and an.mint in self.watcher.watches:
             from .engines.live import watch_info_from_result
             self.watcher.watches[an.mint].info.update({k: v for k, v in watch_info_from_result(r).items() if v})
@@ -149,7 +147,7 @@ class Analyzer:
     def _maybe_watch(self, an: Analysis) -> None:
         """Mode Scalp : le suivi en direct démarre dès la première fiche, sans attendre la fin de l'analyse."""
         s = self.svc.settings.all()
-        if not self.watcher or s.get("trading_mode") != "scalp" or not (s.get("scalp") or {}).get("auto_watch", True):
+        if not self.watcher or not (s.get("scalp") or {}).get("auto_watch", True):
             return
         from .engines.live import watch_info_from_result
         r = an.result
@@ -227,6 +225,7 @@ class Analyzer:
         db.execute("UPDATE fact_checks SET analysis_id=? WHERE mint=? AND analysis_id IS NULL", (an.id, an.mint))
         if v(m.get("price_usd")):
             tracker.schedule(db, an.id, r["started_at"])
+            tracker.schedule_scalp(db, an.id, r["started_at"], r, self.svc.settings.all())
         r["previous_analysis_id"] = prev["last_analysis_id"] if prev else None
 
     def _notifications(self, r: dict) -> None:

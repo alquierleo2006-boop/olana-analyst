@@ -99,7 +99,7 @@ export default function App() {
         {ready === "fail" && <div className="p-6 text-center text-bad">Le moteur d'analyse local ne répond pas. Redémarre l'application ; si le problème persiste, consulte le fichier journal (voir README).</div>}
         {ready === "ok" && <>
           {page === "home" && <Home onAnalyze={analyze} go={go} health={health} input={input} setInput={setInput} error={error} setError={setError} busy={busy} />}
-          {page === "analysis" && aid && <Analysis key={aid} id={aid} compact={compact} mode={settings?.trading_mode} onBack={home} onReanalyze={analyze} />}
+          {page === "analysis" && aid && <Analysis key={aid} id={aid} compact={compact} onBack={home} onReanalyze={analyze} />}
           {page === "history" && <History open={(id) => go("analysis", id)} back={home} />}
           {page === "narratives" && <Narratives back={home} analyze={analyze} />}
           {page === "wallets" && <Wallets back={home} />}

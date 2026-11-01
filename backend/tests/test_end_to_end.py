@@ -67,18 +67,18 @@ def test_full_analysis_pumpfun():
     assert soc["x"][0]["status"] == "PROBABLEMENT AUTHENTIQUE"
     assert soc["telegram"][0]["status"] == "PROBABLEMENT AUTHENTIQUE"
     assert soc["instagram"][0]["status"] == "NON TROUVÉ"
-    claims = r["factcheck"]["claims"]
-    assert any("OpenAI" in c["text"] for c in claims)
-    assert all(c["status"] in ("NON VÉRIFIÉ", "PARTIELLEMENT CONFIRMÉ", "CONFIRMÉ PAR PLUSIEURS SOURCES") for c in claims)
+    assert "factcheck" not in r["modules"] and "project" not in r["modules"]  # modules lents retirés (100 % scalp)
+    assert r["modules"]["momentum"]["status"] == "terminé"
     assert r["narrative"]["score"]["available"] is True
     assert any(m["matched_terms"] for m in r["narrative"]["matches"]), r["narrative"]
     sc = r["scores"]
     assert 0 <= sc["global"] <= 10 and sc["verdict"] in ("BUY SETUP", "WATCH", "AVOID")
     assert sc["scalp"]["decision"] in ("ENTRÉE POSSIBLE", "ATTENDRE", "NE PAS ENTRER")
     assert len(sc["scalp"]["checks"]) == 8
-    assert set(sc["categories"]) >= {"onchain", "momentum", "narrative", "social", "credibility", "smart_money"}
+    assert sc["categories"]["momentum"]["weight"] == 40 and sc["categories"]["credibility"]["weight"] == 0
+    assert r["probabilities"]["scalp"]["message"] == "DONNÉES INSUFFISANTES POUR UNE PROBABILITÉ FIABLE"
     assert r["probabilities"]["horizons"]["1h"]["message"] == "DONNÉES INSUFFISANTES POUR UNE PROBABILITÉ FIABLE"
-    assert r["timing"]["first_result_ms"] < 5000
+    assert r["timing"]["first_result_ms"] < 3000
     assert r["summary"]
     assert hist[0]["id"] == aid and hist[0]["score"] == sc["global"]
     assert perf["horizons"]["1h"]["observations"] == 0

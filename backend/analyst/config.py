@@ -34,19 +34,14 @@ DEFAULT_SETTINGS: dict = {
     },
     "rpc_url": "https://api.mainnet-beta.solana.com",
     "llm": {"provider": "none", "base_url": "http://localhost:11434/v1", "model": "llama3.1:8b"},
-    "weights": {"onchain": 25, "momentum": 20, "narrative": 25, "social": 20, "credibility": 10, "smart_money": 0},
-    # Style de trading : chaque mode a ses propres pondérations (la sécurité garde toujours un poids fort).
-    "trading_mode": "scalp",  # scalp | standard | hold
-    "mode_weights": {
-        "scalp": {"onchain": 35, "momentum": 40, "narrative": 10, "social": 10, "credibility": 0, "smart_money": 5},
-        "hold": {"onchain": 25, "momentum": 10, "narrative": 20, "social": 20, "credibility": 25, "smart_money": 0},
-    },
+    # Logiciel 100 % scalp : sécurité + momentum court terme dominent.
+    "weights": {"onchain": 35, "momentum": 40, "narrative": 10, "social": 10, "credibility": 0, "smart_money": 5},
     "scalp": {"auto_watch": True, "rug_only": True, "interval_s": 3, "max_minutes": 60, "reversal_pct": 15, "pump_alert_pct": 25,
               "target_multiple": 1.4, "stop_pct": 20, "position_sol": 0.25,
               "entry_mcap_min": 6000, "entry_mcap_max": 15000, "take_profit_pct": 40},
     "thresholds": {"buy_setup_min": 7.0, "avoid_below": 4.0, "min_confidence_buy": 0.6,
                    "min_confidence": 0.35, "max_risk_buy": 5.0},
-    "rise_definition_pct": 20.0,
+    "rise_definition_pct": 40.0,
     "probability_min_test_samples": 100,
     "risk_tolerance": "normal",  # prudent | normal | agressif
     "default_horizon": "1h",
@@ -126,9 +121,6 @@ class Secrets:
 
 
 def active_weights(settings: dict) -> dict:
-    mode = settings.get("trading_mode", "standard")
-    if mode in (settings.get("mode_weights") or {}):
-        return settings["mode_weights"][mode]
     return settings.get("weights", {})
 
 
@@ -141,6 +133,12 @@ class Settings:
         if self._cache is None:
             row = self.db.one("SELECT value FROM application_settings WHERE key='settings'")
             stored = json.loads(row["value"]) if row else {}
+            # Migration v0.3 : suppression des modes standard / hold — les pondérations scalp deviennent LES pondérations.
+            if "trading_mode" in stored or "mode_weights" in stored:
+                mw = (stored.get("mode_weights") or {}).get("scalp")
+                stored["weights"] = mw or DEFAULT_SETTINGS["weights"]
+                stored.pop("trading_mode", None)
+                stored.pop("mode_weights", None)
             # Migration v0.2.2 : profil scalp de l'utilisateur (entrée 6-15 k$, +40 %, 0,25 SOL).
             sc = stored.get("scalp")
             if isinstance(sc, dict) and "entry_mcap_min" not in sc:

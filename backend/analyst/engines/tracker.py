@@ -16,6 +16,51 @@ SCORE_BUCKETS = [(0, 4), (4, 6), (6, 7), (7, 8), (8, 10.01)]
 FEES_ROUNDTRIP_PCT = 2.0  # hypothèse frais + slippage aller-retour, affichée
 
 
+SCALP_WINDOW_S = 3600
+
+
+def schedule_scalp(db, analysis_id: int, t0: float, r: dict, settings: dict) -> None:
+    sc = settings.get("scalp") or {}
+    chk = ((r.get("scores") or {}).get("scalp") or {})
+    plan = chk.get("plan") or {}
+    db.execute("INSERT OR IGNORE INTO scalp_outcomes(analysis_id, due_at, tp_pct, sl_pct, cost_pct, score, decision) "
+               "VALUES(?,?,?,?,?,?,?)",
+               (analysis_id, t0 + SCALP_WINDOW_S, float(sc.get("take_profit_pct", 40)), float(sc.get("stop_pct", 20)),
+                plan.get("cost_pct"), (r.get("scores") or {}).get("global"), chk.get("decision")))
+
+
+def scalp_outcome(candles: list[list], t0: float, tp: float, sl: float, window_s: float = SCALP_WINDOW_S) -> dict | None:
+    """Rejoue le trade minute par minute : l'objectif (+tp %) est-il touché avant le stop (−sl %) ?
+    Entrée = ouverture de la 1re bougie après l'analyse. Si les deux sont touchés dans la même minute,
+    l'issue est comptée comme perdante (hypothèse prudente)."""
+    start = int(t0 // 60) * 60
+    win = [c for c in candles if start <= c[0] <= t0 + window_s]
+    if not win or not win[0][1]:
+        return None
+    entry = win[0][1]
+    up, down = entry * (1 + tp / 100), entry * (1 - sl / 100)
+    hi = lo = entry
+    for c in win:
+        hi, lo = max(hi, c[2]), min(lo, c[3])
+        hit_tp, hit_sl = c[2] >= up, c[3] <= down
+        if hit_tp or hit_sl:
+            outcome = "ambiguous" if hit_tp and hit_sl else "win" if hit_tp else "loss"
+            return {"outcome": outcome, "minutes": (c[0] - start) / 60, "entry_price": entry,
+                    "max_gain_pct": 100 * (hi / entry - 1), "max_drawdown_pct": 100 * (lo / entry - 1),
+                    "final_change_pct": 100 * (c[4] / entry - 1)}
+    return {"outcome": "open", "minutes": None, "entry_price": entry, "max_gain_pct": 100 * (hi / entry - 1),
+            "max_drawdown_pct": 100 * (lo / entry - 1), "final_change_pct": 100 * (win[-1][4] / entry - 1)}
+
+
+def scalp_pnl(o: dict, tp: float, sl: float, cost: float | None) -> float:
+    cost = 3.0 if cost is None else cost
+    if o["outcome"] == "win":
+        return tp - cost
+    if o["outcome"] in ("loss", "ambiguous"):
+        return -sl - cost
+    return o["final_change_pct"] - cost
+
+
 def schedule(db, analysis_id: int, t0: float) -> None:
     db.executemany("INSERT OR IGNORE INTO historical_performance(analysis_id, horizon, due_at) VALUES(?,?,?)",
                    [(analysis_id, h, t0 + s) for h, s in HORIZONS.items()])
@@ -79,11 +124,40 @@ class Tracker:
         self.status["last_run"] = now
         return len(due)
 
+    async def run_scalp_once(self) -> int:
+        db = self.svc.db
+        due = db.all("SELECT s.analysis_id, s.tp_pct, s.sl_pct, s.cost_pct, a.created_at, a.result_json FROM scalp_outcomes s "
+                     "JOIN token_analyses a ON a.id = s.analysis_id WHERE s.status='pending' AND s.due_at <= ? "
+                     "ORDER BY s.due_at LIMIT 10", (time.time(),))
+        for d in due:
+            r = json.loads(d["result_json"] or "{}")
+            pool = ((r.get("market") or {}).get("main_pair") or {}).get("address") or (r.get("market") or {}).get("gecko_pool")
+            o = None
+            if pool:
+                try:
+                    o = scalp_outcome(await self.svc.gecko.ohlcv(pool, "minute", 1, 300), d["created_at"],
+                                      d["tp_pct"], d["sl_pct"])
+                except Exception:
+                    o = None
+            if not o:
+                # Données absentes : on réessaie plus tard, puis on abandonne après 24 h.
+                late = time.time() - d["created_at"] > 86400
+                db.execute("UPDATE scalp_outcomes SET status=?, due_at=? WHERE analysis_id=?",
+                           ("no_data" if late else "pending", time.time() + 600, d["analysis_id"]))
+                continue
+            db.execute("UPDATE scalp_outcomes SET status='done', outcome=?, minutes=?, entry_price=?, max_gain_pct=?, "
+                       "max_drawdown_pct=?, final_change_pct=?, pnl_pct=?, evaluated_at=? WHERE analysis_id=?",
+                       (o["outcome"], o["minutes"], o["entry_price"], o["max_gain_pct"], o["max_drawdown_pct"],
+                        o["final_change_pct"], scalp_pnl(o, d["tp_pct"], d["sl_pct"], d["cost_pct"]), time.time(),
+                        d["analysis_id"]))
+        return len(due)
+
     async def loop(self) -> None:
         while True:
             try:
                 if self.svc.settings.get("tracking_enabled", True):
                     await self.run_once()
+                    await self.run_scalp_once()
                 self.prune()
             except Exception as exc:
                 self.status["error"] = str(exc)[:200]
@@ -164,11 +238,28 @@ def fit_probability_model(samples: list[dict], rise_pct: float, min_test: int) -
             "reason": None if usable else "modèle non validé (pas meilleur que le taux de base ou mal calibré)"}
 
 
+def _scalp_samples(db) -> list[dict]:
+    rows = db.all("SELECT s.score AS score, s.outcome AS outcome FROM scalp_outcomes s JOIN token_analyses a ON a.id = s.analysis_id "
+                  "WHERE s.status='done' AND s.score IS NOT NULL ORDER BY a.created_at")
+    # change_pct fictif : 100 si objectif touché avant le stop, sinon −100 (réutilise le modèle calibré).
+    return [{"score": r["score"], "change_pct": 100.0 if r["outcome"] == "win" else -100.0} for r in rows]
+
+
 def probabilities_for(db, score: float | None, settings: dict) -> dict:
     rise = settings.get("rise_definition_pct", 20.0)
     min_test = settings.get("probability_min_test_samples", 100)
+    sc = settings.get("scalp") or {}
     out = {"definition": f"hausse ≥ {rise:g}% du prix depuis l'analyse, après {FEES_ROUNDTRIP_PCT:g}% de frais estimés",
            "horizons": {}}
+    model = fit_probability_model(_scalp_samples(db), 0, min_test)
+    key = f"objectif +{sc.get('take_profit_pct', 40):g}% avant stop −{sc.get('stop_pct', 20):g}% (1 h)"
+    if model["usable"] and score is not None:
+        b = model["buckets"][bucket_of(score)]
+        out["scalp"] = {"label": key, "available": True, "probability": b["probability"], "ci95": b["ci95"],
+                        "comparable_observations": b["n"], "brier": model["brier"], "ece": model["ece"]}
+    else:
+        out["scalp"] = {"label": key, "available": False, "message": "DONNÉES INSUFFISANTES POUR UNE PROBABILITÉ FIABLE",
+                        "observations": model["observations"], "detail": model.get("reason")}
     for h in PROB_HORIZONS:
         model = fit_probability_model(_samples(db, h), rise, min_test)
         if not model["usable"] or score is None:
@@ -221,9 +312,38 @@ def backtest_report(db, settings: dict) -> dict:
                           "recall": round(tp / (tp + fn), 3) if tp + fn else None, "false_positives": fp},
             "probability_model": fit_probability_model(S, rise, min_test) if h in PROB_HORIZONS else None,
         }
+    report["scalp"] = scalp_report(db)
     report["note"] = ("Biais de sélection : seuls les tokens que tu as choisi d'analyser sont inclus. "
                       "Les pondérations ne sont jamais modifiées automatiquement ; chaque changement crée une nouvelle "
                       "version du modèle.")
     report["model_versions"] = [dict(r, weights=json.loads(r["weights"]), thresholds=json.loads(r["thresholds"]))
                                 for r in db.all("SELECT * FROM model_versions ORDER BY id DESC LIMIT 20")]
     return report
+
+
+def scalp_report(db) -> dict:
+    rows = db.all("SELECT s.*, a.launchpad, a.mcap FROM scalp_outcomes s JOIN token_analyses a ON a.id = s.analysis_id "
+                  "WHERE s.status='done'")
+    pending = db.one("SELECT COUNT(*) c FROM scalp_outcomes WHERE status='pending'")["c"]
+
+    def agg(rs):
+        n = len(rs)
+        wins = sum(1 for r in rs if r["outcome"] == "win")
+        losses = sum(1 for r in rs if r["outcome"] in ("loss", "ambiguous"))
+        pnl = [r["pnl_pct"] for r in rs if r["pnl_pct"] is not None]
+        mins = sorted(r["minutes"] for r in rs if r["outcome"] == "win" and r["minutes"] is not None)
+        return {"n": n, "wins": wins, "losses": losses, "open": n - wins - losses,
+                "win_rate": round(wins / n, 3) if n else None, "ci95": [round(x, 3) for x in wilson(wins, n)],
+                "avg_pnl_pct": round(sum(pnl) / len(pnl), 2) if pnl else None,
+                "median_minutes_to_target": mins[len(mins) // 2] if mins else None}
+    by_score = {}
+    for lo, hi in SCORE_BUCKETS:
+        rs = [r for r in rows if r["score"] is not None and lo <= r["score"] < hi]
+        if rs:
+            by_score[f"{lo}–{min(hi, 10):g}"] = agg(rs)
+    by_decision = {d: agg([r for r in rows if r["decision"] == d]) for d in {r["decision"] for r in rows} if d}
+    return {"observations": len(rows), "pending": pending, "overall": agg(rows) if rows else None,
+            "by_score": by_score, "by_decision": by_decision,
+            "definition": "Trade rejoué minute par minute pendant 1 h après l'analyse : gagnant si l'objectif est touché "
+                          "avant le stop ; si les deux le sont dans la même minute, compté perdant. PnL moyen après coût "
+                          "aller-retour estimé."}

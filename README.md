@@ -54,13 +54,17 @@ Les clés sont stockées dans le **Gestionnaire d'identification Windows** (chif
 Pages : Historique (filtres + comparaison), Narratives mondiales (top 10), Smart money (wallets suivis),
 Performance (backtesting), Paramètres.
 
-## Modes de trading (⚙ Paramètres → Style de trading)
+## Logiciel 100 % scalp (v0.3)
 
-| Mode | Horizon | Pondérations (on-chain / momentum / narrative / social / crédibilité / smart money) |
-|---|---|---|
-| **SCALP** (défaut) | minutes | 35 / 40 / 10 / 10 / 0 / 5 |
-| STANDARD | heures | 25 / 20 / 25 / 20 / 10 / 0 |
-| HOLD | jours | 25 / 10 / 20 / 20 / 25 / 0 |
+Un seul mode, optimisé pour le scalp de memecoins (entrée 6–15 k$ de market cap, sortie +30–50 %, 0,25 SOL) :
+- **Pondérations** : on-chain & sécurité 35 %, momentum 5 min 40 %, narrative 10 %, social 10 %, smart money 5 %.
+- **Vitesse** : fact-checking et analyse de site supprimés ; les bougies GeckoTerminal (limitées à 1 requête / 2 s)
+  sont calculées en arrière-plan, après la 1re fiche (objectif : 3 s).
+- **Momentum très court terme** : variation 5 min, achats/ventes 5 min, activité et vitesse de remplissage de la
+  bonding curve, acheteurs uniques.
+- **Mes résultats scalp** (page Performance) : chaque analyse est rejouée minute par minute pendant 1 h pour savoir
+  si l'objectif (+40 %) a été touché **avant** le stop (−20 %). Taux de réussite et PnL moyen par note et par décision
+  de la checklist ; la probabilité affichée porte sur ce scénario dès que les données suffisent.
 
 **Checklist d'entrée scalp** (en haut de la fiche) : décision ✅ ENTRÉE POSSIBLE / ⏳ ATTENDRE / ⛔ NE PAS ENTRER
 à partir de 8 contrôles — zone de market cap (défaut 6–15 k$), pièges techniques, bundle/snipers, concentration,
@@ -118,7 +122,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 32 tests : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 35 tests : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

@@ -67,57 +67,71 @@ def score_onchain(r: dict) -> dict:
 
 
 def score_momentum(r: dict) -> dict:
+    """Momentum très court terme (scalp) : 5 min, activité de la bonding curve, traders uniques."""
     m = r.get("market") or {}
     if not (m.get("price_usd") or {}).get("v"):
         return _s(None, 0, ["aucune donnée de marché"])
     s, pos, neg, n = 5.0, [], [], 0
     pc = m.get("price_change") or {}
-    mom = m.get("momentum") or {}
-    ch1 = pc.get("h1") if pc.get("h1") is not None else (mom.get("change") or {}).get("60m")
-    if ch1 is not None:
+    ch5 = pc.get("m5")
+    if ch5 is not None:
         n += 1
-        if ch1 > 30:
-            s += 1.5; pos.append(f"+{ch1:.0f}% sur 1 h")
-        elif ch1 > 5:
-            s += 0.8
-        elif ch1 < -30:
-            s -= 2; neg.append(f"{ch1:.0f}% sur 1 h")
-        elif ch1 < -10:
-            s -= 1
+        if ch5 > 15:
+            s += 1.2; pos.append(f"+{ch5:.0f}% sur 5 min")
+        elif ch5 > 3:
+            s += 0.6
+        elif ch5 < -15:
+            s -= 1.8; neg.append(f"{ch5:.0f}% sur 5 min")
+        elif ch5 < -5:
+            s -= 0.8
+    tx = (m.get("txns") or {}).get("m5") or {}
+    b, se = tx.get("buys") or 0, tx.get("sells") or 0
+    if b + se >= 10:
+        n += 1
+        ratio = b / max(1, se)
+        if ratio >= 2:
+            s += 1.8; pos.append(f"forte pression acheteuse (5 min : {b} achats / {se} ventes)")
+        elif ratio >= 1.3:
+            s += 0.9; pos.append(f"acheteurs dominants (5 min : {b}/{se})")
+        elif ratio < 0.7:
+            s -= 2.0; neg.append(f"vendeurs dominants (5 min : {b}/{se})")
+        elif ratio < 0.9:
+            s -= 0.8
+    act = m.get("curve_activity") or {}
+    tpm = act.get("tx_per_min_5m")
+    if tpm is not None:
+        n += 1
+        if tpm >= 20:
+            s += 1.0; pos.append(f"curve très active ({tpm:.0f} tx/min)")
+        elif tpm >= 8:
+            s += 0.5
+        elif tpm < 2:
+            s -= 1.0; neg.append("curve quasi inactive")
+    ppm = act.get("progress_per_min")
+    if ppm is not None and ppm >= 1:
+        s += 0.6; pos.append(f"curve se remplit vite (+{ppm:.1f} %/min)")
+    ut = (m.get("unique_traders") or {}).get("m5") or {}
+    if ut.get("buyers"):
+        n += 1
+        if ut["buyers"] >= 25:
+            s += 0.6; pos.append(f"{ut['buyers']} acheteurs uniques en 5 min")
+        elif ut["buyers"] < 5:
+            s -= 0.6; neg.append("très peu d'acheteurs uniques sur 5 min")
+    mom = m.get("momentum") or {}
     acc = mom.get("volume_acceleration")
     if acc is not None:
         n += 1
         if acc > 2:
-            s += 1.5; pos.append(f"volume en accélération (×{acc:.1f} vs moyenne)")
+            s += 0.8; pos.append(f"volume en accélération (×{acc:.1f})")
         elif acc < 0.4:
-            s -= 1; neg.append("volume en net ralentissement")
-    tx = (m.get("txns") or {}).get("h1") or {}
-    b, se = tx.get("buys") or 0, tx.get("sells") or 0
-    if b + se >= 20:
-        n += 1
-        ratio = b / max(1, se)
-        if ratio > 1.4:
-            s += 1; pos.append(f"acheteurs dominants (ratio achats/ventes 1 h : {ratio:.1f})")
-        elif ratio < 0.7:
-            s -= 1; neg.append(f"vendeurs dominants (ratio {ratio:.1f})")
-    ut = (m.get("unique_traders") or {}).get("h1") or {}
-    if ut.get("buyers"):
-        n += 1
-        if ut["buyers"] > 150:
-            s += 0.8; pos.append(f"{ut['buyers']} acheteurs uniques sur 1 h")
-        elif ut["buyers"] < 15:
-            s -= 0.8; neg.append("très peu d'acheteurs uniques")
+            s -= 0.8; neg.append("volume en net ralentissement")
     dd = mom.get("drawdown_from_high_pct")
-    if dd is not None and dd < -50:
-        s -= 1.5; neg.append(f"{dd:.0f}% sous le plus haut récent")
+    if dd is not None and dd < -40:
+        s -= 1.0; neg.append(f"{dd:.0f}% sous le plus haut récent")
     org = m.get("organic") or {}
     if org.get("level") == "suspect":
         s -= 1.5; neg.append("activité possiblement artificielle : " + "; ".join(org.get("flags", [])[:2]))
-    vol24 = ((m.get("volume") or {}).get("h24") or {}).get("v") or 0
-    mcap = (m.get("mcap") or {}).get("v") or 0
-    if mcap and vol24 / mcap > 1:
-        s += 0.5; pos.append("volume 24 h supérieur à la market cap (forte rotation)")
-    return _s(s, min(0.9, 0.35 + 0.1 * n), ["prix, volumes, transactions, traders uniques"], pos, neg)
+    return _s(s, min(0.9, 0.35 + 0.12 * n), ["5 min, activité de la curve, traders uniques, volume"], pos, neg)
 
 
 def score_from_section(r: dict, key: str) -> dict:
@@ -202,7 +216,7 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
             missing.append(f"risque {risk['score']}/10")
         verdict, why = "WATCH", "intéressant mais à confirmer : " + ", ".join(missing)
     scalp = None
-    if settings.get("trading_mode") == "scalp":
+    if True:  # logiciel 100 % scalp
         from .scalp import checklist
         scalp = checklist(r, settings)
         # En mode Scalp, la checklist d'entrée prime : un blocage interdit BUY SETUP.
@@ -224,7 +238,6 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
         "positives": list(dict.fromkeys(pos))[:5], "negatives": list(dict.fromkeys(neg))[:5],
         "explanation": "Moyenne pondérée : " + " ; ".join(explanation) +
                        (f". Non disponibles (exclues, confiance réduite) : {', '.join(missing_cats)}." if missing_cats else "."),
-        "trading_mode": settings.get("trading_mode", "standard"),
         "scalp": scalp,
         "disclaimer": "Évaluation du potentiel selon les indicateurs disponibles. Ce n'est ni une probabilité ni un "
                       "conseil financier ; aucun ordre n'est passé.",
