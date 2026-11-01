@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, wsUrl } from "../lib/api";
 import { pct, usd } from "../lib/format";
-import { LineChart } from "./charts";
 import { Badge, Button, Card } from "./ui";
 
 /** Suivi en direct (mode Scalp) : market cap rafraîchie toutes les quelques secondes. Aucune transaction. */
@@ -47,7 +46,6 @@ export default function LivePanel({ mint, autoStarted }: { mint: string; autoSta
   }
   const ch = s?.change || {};
   const dd = s?.drawdown_pct;
-  const pts = (s?.points || []).map((p: number[]) => ({ x: p[0], y: p[1] }));
   const tone = (x: number | null | undefined) => (x == null ? "text-muted" : x >= 0 ? "text-good" : "text-bad");
   const inp = "w-24 rounded-md border border-line bg-panel2 px-2 py-1 text-right text-[12px] outline-none focus:border-info/60";
   return (
@@ -72,7 +70,6 @@ export default function LivePanel({ mint, autoStarted }: { mint: string; autoSta
         {s?.state?.dev_sold && <Badge tone="bad">le dev a vendu</Badge>}
         {s?.state?.error && <span className="text-warn">erreur de lecture : {s.state.error}</span>}
       </div>
-      {pts.length > 1 && <div className="mt-2"><LineChart points={pts} height={110} fmtY={(n) => usd(n, 1)} fmtX={(t) => new Date(t * 1000).toLocaleTimeString("fr-FR")} label="Market cap en direct" /></div>}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
         <span className="text-ink2">Alerte si MC ≥</span><input className={inp} value={above} onChange={(e) => setAbove(e.target.value.replace(/[^\d]/g, ""))} placeholder="objectif $" />
         <span className="text-ink2">ou ≤</span><input className={inp} value={below} onChange={(e) => setBelow(e.target.value.replace(/[^\d]/g, ""))} placeholder="stop $" />
