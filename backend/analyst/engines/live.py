@@ -290,7 +290,8 @@ def watch_info_from_result(r: dict) -> dict:
     watched = []
     for h in (r.get("holders") or {}).get("top") or []:
         if h.get("kind") == "wallet" and h.get("token_account") and len(watched) < 15:
-            label = "bundle (financement commun)" if h.get("owner") in bundle else (h.get("label") or "gros holder")
+            label = "bundle (financement commun)" if h.get("owner") in bundle else \
+                "nouveau wallet 🌱" if h.get("fresh") else (h.get("label") or "gros holder")
             watched.append({"token_account": h["token_account"], "owner": h.get("owner"), "pct": h.get("pct"), "label": label})
     return {"name": tok.get("name"), "symbol": tok.get("symbol"), "supply": (tok.get("supply") or {}).get("v"),
             "creator": (r.get("developer") or {}).get("address"), "curve_address": curve,

@@ -10,7 +10,7 @@ TECH_CATEGORIES = ("Intelligence artificielle", "Technologie", "Crypto / Solana"
 
 def checklist(r: dict, settings: dict) -> dict:
     base = S.checklist(r, settings)
-    keep = ("Pièges techniques", "Bundle / snipers", "Concentration", "Développeur", "Coût aller-retour", "Réseaux sociaux")
+    keep = ("Pièges techniques", "Bundle / snipers", "🌱 Fresh wallets", "Concentration", "Développeur", "Coût aller-retour", "Réseaux sociaux")
     checks = [c for c in base["checks"] if c["name"] in keep]
     mods = r.get("modules") or {}
     pending = lambda k: (mods.get(k) or {}).get("status") == "en cours"  # noqa: E731

@@ -207,7 +207,7 @@ async def run_clusters(ctx) -> None:
     if not H:
         C["unavailable"] = "holders indisponibles"
         return
-    wallets = [r["owner"] for r in H.get("top", []) if r["kind"] == "wallet" and r["owner"]][:15]
+    wallets = [r["owner"] for r in H.get("top", []) if r["kind"] == "wallet" and r["owner"]][:20]
     sem = asyncio.Semaphore(4)
 
     async def funding(w):
@@ -241,11 +241,31 @@ async def run_clusters(ctx) -> None:
     clusters = [{"funder": f, "wallets": ws, "supply_pct": round(sum(pct.get(w, 0) for w in ws), 2),
                  "link": "financement commun observé (1re transaction)", "status": ESTIMATED}
                 for f, ws in groups.items() if len(ws) >= 2]
-    fresh = [w for w, i in res.items() if i and not i.get("old_wallet") and i.get("tx_count", 0) < 20]
+    now = time.time()
+
+    def is_fresh(i):
+        """🌱 Nouveau wallet : moins de 20 transactions au total, ou 1re transaction il y a moins de 24 h."""
+        if not i or i.get("old_wallet"):
+            return False
+        return i.get("tx_count", 0) < 20 or bool(i.get("first_tx_time") and now - i["first_tx_time"] < 86400)
+    fresh = [w for w, i in res.items() if is_fresh(i)]
+    # La feuille 🌱 est affichée à côté de chaque nouveau wallet dans la liste des holders.
+    for row in H.get("top", []):
+        info = res.get(row.get("owner"))
+        if info is not None:
+            row["fresh"] = is_fresh(info)
+            row["wallet_tx_count"] = info.get("tx_count")
+            row["wallet_tx_count_is_minimum"] = bool(info.get("old_wallet"))
+            if info.get("first_tx_time"):
+                row["wallet_age_h"] = round((now - info["first_tx_time"]) / 3600, 1)
     times = sorted(i["first_tx_time"] for i in res.values() if i and i.get("first_tx_time"))
     C["clusters"] = sorted(clusters, key=lambda c: -c["supply_pct"])
     C["fresh_wallets"] = {"count": len(fresh), "of": len(wallets),
-                          "supply_pct": round(sum(pct.get(w, 0) for w in fresh), 2)}
+                          "supply_pct": round(sum(pct.get(w, 0) for w in fresh), 2),
+                          "wallets": [{"owner": w, "pct": round(pct.get(w, 0), 2), "tx_count": res[w].get("tx_count"),
+                                       "age_h": round((now - res[w]["first_tx_time"]) / 3600, 1) if res[w].get("first_tx_time") else None}
+                                      for w in fresh],
+                          "definition": "moins de 20 transactions au total, ou 1re transaction il y a moins de 24 h"}
     if len(times) >= 3:
         span = [times[i + 2] - times[i] for i in range(len(times) - 2)]
         C["min_creation_gap_3_wallets_s"] = min(span)
@@ -253,7 +273,7 @@ async def run_clusters(ctx) -> None:
     if isinstance(rc, dict) and (rc.get("graphInsidersDetected") or rc.get("insiderNetworks")):
         C["rugcheck_insiders"] = {"detected": rc.get("graphInsidersDetected"),
                                   "networks": len(rc.get("insiderNetworks") or []), "source": "RugCheck"}
-    C["method"] = ("Analyse des 15 plus gros wallets : source du premier financement en SOL et ancienneté. "
+    C["method"] = ("Analyse des 20 plus gros wallets : source du premier financement en SOL et ancienneté. "
                    "Un financement commun est un lien observé, pas une preuve de propriété commune.")
     total_cluster = sum(c["supply_pct"] for c in clusters)
     if total_cluster > 15:

@@ -39,9 +39,22 @@ def test_dev_holding_blocks():
     assert checklist(r, S)["decision"] == "NE PAS ENTRER"
 
 
+def test_fresh_wallets_line():
+    c = checklist(base(clusters={"fresh_wallets": {"supply_pct": 35, "count": 6, "of": 20}, "clusters": []}), S)
+    fw = next(x for x in c["checks"] if x["name"] == "🌱 Fresh wallets")
+    assert fw["status"] == "bloquant" and "6 nouveau(x) wallet(s) sur 20" in fw["detail"]
+    assert c["decision"] == "NE PAS ENTRER"
+    c = checklist(base(clusters={"fresh_wallets": {"supply_pct": 15, "count": 3, "of": 20}, "clusters": []}), S)
+    assert next(x for x in c["checks"] if x["name"] == "🌱 Fresh wallets")["status"] == "attention"
+    c = checklist(base(clusters={"fresh_wallets": {"supply_pct": 0, "count": 0, "of": 20}, "clusters": []}), S)
+    assert next(x for x in c["checks"] if x["name"] == "🌱 Fresh wallets")["status"] == "ok"
+
+
 def test_bundle_blocks():
-    r = base(clusters={"fresh_wallets": {"supply_pct": 35}, "clusters": []})
-    assert checklist(r, S)["decision"] == "NE PAS ENTRER"
+    r = base(clusters={"fresh_wallets": {"supply_pct": 0}, "clusters": [{"supply_pct": 35, "wallets": ["a", "b", "c"]}]})
+    c = checklist(r, S)
+    assert next(x for x in c["checks"] if x["name"] == "Bundle / snipers")["status"] == "bloquant"
+    assert c["decision"] == "NE PAS ENTRER"
 
 
 def test_out_of_zone_and_weak_signals_wait():

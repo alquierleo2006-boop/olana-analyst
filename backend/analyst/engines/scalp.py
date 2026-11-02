@@ -50,17 +50,25 @@ def checklist(r: dict, settings: dict) -> dict:
     else:
         checks.append(_c("Pièges techniques", OK, "mint/freeze révoqués, pas d'extension dangereuse détectée"))
 
-    # 3. Bundle / snipers
+    # 3. Bundle / snipers (wallets financés par la même adresse)
     if not C or pending("clusters"):
         checks.append(_c("Bundle / snipers", WAIT, "analyse des wallets en cours"))
+        checks.append(_c("🌱 Fresh wallets", WAIT, "analyse des wallets en cours"))
     elif C.get("unavailable"):
         checks.append(_c("Bundle / snipers", WARN, "analyse des wallets indisponible"))
+        checks.append(_c("🌱 Fresh wallets", WARN, "analyse des wallets indisponible"))
     else:
-        fresh = (C.get("fresh_wallets") or {}).get("supply_pct") or 0
         clus = sum(c["supply_pct"] for c in C.get("clusters") or [])
-        tot = max(fresh, clus)
-        st = OK if tot < 15 else WARN if tot < 30 else BAD
-        checks.append(_c("Bundle / snipers", st, f"wallets neufs {fresh:.0f}% · financement commun {clus:.0f}% du supply"))
+        n_cl = sum(len(c["wallets"]) for c in C.get("clusters") or [])
+        st = OK if clus < 15 else WARN if clus < 30 else BAD
+        checks.append(_c("Bundle / snipers", st, f"{n_cl} wallet(s) financés par la même adresse · {clus:.0f}% du supply"
+                         if n_cl else "aucun groupe de wallets financés par la même adresse"))
+        # 3 bis. 🌱 Nouveaux wallets parmi les gros holders
+        fw = C.get("fresh_wallets") or {}
+        fpct, fn, of = fw.get("supply_pct") or 0, fw.get("count") or 0, fw.get("of") or 0
+        st = OK if fpct < 10 else WARN if fpct < 25 else BAD
+        checks.append(_c("🌱 Fresh wallets", st, f"{fn} nouveau(x) wallet(s) sur {of} gros holders · {fpct:.1f}% du supply"
+                         if fn else f"aucun nouveau wallet parmi les {of} gros holders"))
 
     # 4. Concentration
     top10 = (H.get("concentration_excl_technical") or {}).get("top10")

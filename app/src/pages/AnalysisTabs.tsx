@@ -204,8 +204,13 @@ export function Holders({ d }: { d: any }) {
         </Card>
         <Card title="Répartition des 20 plus gros comptes" right={<span className="text-[10px] text-muted">hachuré = pool / programme / burn</span>}>
           {H.top?.length ? <HBars fmt={(n) => `${n.toFixed(2)}%`} rows={H.top.map((r: any) => ({
-            label: r.label || short(r.owner, 5), value: r.pct, technical: r.kind !== "wallet", title: `${r.owner}\n${r.kind}`,
+            label: `${r.fresh ? "🌱 " : ""}${r.label || short(r.owner, 5)}`, value: r.pct, technical: r.kind !== "wallet",
+            title: `${r.owner}\n${r.kind}${r.fresh ? "\n🌱 nouveau wallet" : ""}${r.wallet_tx_count != null ? `\n${r.wallet_tx_count_is_minimum ? "≥ " : ""}${r.wallet_tx_count} transactions` : ""}${r.wallet_age_h != null ? `\nactif depuis ${r.wallet_age_h < 48 ? `${r.wallet_age_h} h` : `${Math.round(r.wallet_age_h / 24)} j`}` : ""}`,
           }))} /> : <Empty>Holders indisponibles.</Empty>}
+          {(d.clusters?.fresh_wallets?.count ?? null) !== null && (
+            <div className="mt-1.5 text-[12px] text-ink2">🌱 <b>{d.clusters.fresh_wallets.count}</b> nouveau(x) wallet(s) parmi les {d.clusters.fresh_wallets.of} gros holders, qui détiennent <b>{d.clusters.fresh_wallets.supply_pct}%</b> du supply
+              <span className="text-muted"> ({d.clusters.fresh_wallets.definition || "moins de 20 transactions"})</span></div>
+          )}
           <div className="mt-1 text-[10px] text-muted">{H.source}</div>
         </Card>
         <Card title="Clusters de wallets (observations)">
@@ -217,7 +222,15 @@ export function Holders({ d }: { d: any }) {
                   <b>{c.wallets.length} wallets</b> financés par <span className="font-mono">{short(c.funder, 6)}</span> — {c.supply_pct}% du supply <Badge tone="warn">lien observé</Badge>
                 </div>
               ))}
-              {C.fresh_wallets && <div className="mt-1 text-[12px] text-ink2">Wallets neufs (&lt; 20 tx) : {C.fresh_wallets.count}/{C.fresh_wallets.of}, {C.fresh_wallets.supply_pct}% du supply</div>}
+              {C.fresh_wallets?.wallets?.length > 0 && (
+                <div className="mt-1 text-[12px]">
+                  <div className="text-ink2">🌱 Nouveaux wallets :</div>
+                  {C.fresh_wallets.wallets.map((w: any) => (
+                    <div key={w.owner} className="flex justify-between text-[11px]"><span className="font-mono">🌱 {short(w.owner, 6)}</span>
+                      <span className="text-muted">{w.pct}% du supply · {w.tx_count} tx{w.age_h != null ? ` · ${w.age_h < 48 ? `${w.age_h} h` : `${Math.round(w.age_h / 24)} j`}` : ""}</span></div>
+                  ))}
+                </div>
+              )}
               {C.rugcheck_insiders && <div className="text-[12px] text-ink2">RugCheck : réseaux d'initiés détectés = {String(C.rugcheck_insiders.detected)} ({C.rugcheck_insiders.networks})</div>}
               <div className="mt-1 text-[11px] text-muted">{C.method}</div>
             </>

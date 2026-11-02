@@ -74,7 +74,10 @@ def test_full_analysis_pumpfun():
     sc = r["scores"]
     assert 0 <= sc["global"] <= 10 and sc["verdict"] in ("BUY SETUP", "WATCH", "AVOID")
     assert sc["scalp"]["decision"] in ("ENTRÉE POSSIBLE", "ATTENDRE", "NE PAS ENTRER")
-    assert len(sc["scalp"]["checks"]) == 8
+    assert len(sc["scalp"]["checks"]) == 9
+    fresh_rows = [x for x in r["holders"]["top"] if x.get("fresh")]
+    assert len(fresh_rows) == 2 and all(x["wallet_tx_count"] == 1 for x in fresh_rows)  # H1, H2 : 1 transaction
+    assert r["clusters"]["fresh_wallets"]["count"] == 2
     assert sc["categories"]["momentum"]["weight"] == 40 and sc["categories"]["credibility"]["weight"] == 0
     assert r["probabilities"]["scalp"]["message"] == "DONNÉES INSUFFISANTES POUR UNE PROBABILITÉ FIABLE"
     assert r["probabilities"]["horizons"]["1h"]["message"] == "DONNÉES INSUFFISANTES POUR UNE PROBABILITÉ FIABLE"
