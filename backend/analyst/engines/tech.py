@@ -45,7 +45,7 @@ def checklist(r: dict, settings: dict) -> dict:
         age = site.get("domain_age_days")
         if age is not None:
             why.append(f"domaine de {age:.0f} j")
-            if age < 3:
+            if age < 7:
                 st = WARN
         if P.get("has_docs"):
             why.append("documentation")

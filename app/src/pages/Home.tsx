@@ -5,6 +5,7 @@ import { MINT_RE, extractMint } from "../lib/mint";
 import { readClipboard } from "../lib/native";
 import { Badge, Button, Tone } from "../components/ui";
 import { appFullName, isTech } from "../lib/edition";
+import XCheck from "../components/XCheck";
 
 export default function Home({ onAnalyze, go, health, input, setInput, error, setError, busy }:
   { onAnalyze: (mint: string) => void; go: (p: string, arg?: any) => void; health: any; input: string; setInput: (s: string) => void;
@@ -46,6 +47,8 @@ export default function Home({ onAnalyze, go, health, input, setInput, error, se
         {error && <div className="text-[12px] text-bad" role="alert">{error}</div>}
         <Button type="submit" kind="primary" className="w-full py-2.5 text-[14px] tracking-wider" disabled={busy || !input.trim()}>{busy ? "Analyse en cours…" : "ANALYSER"}</Button>
       </form>
+
+      {isTech() && <XCheck mintInput={input} openAnalysis={(id) => go("analysis", id)} />}
 
       <div className="grid grid-cols-2 gap-1.5">
         <Button onClick={() => go("history")}>Historique</Button>

@@ -216,8 +216,9 @@ class Fake:
         if "ipfs.io" in u:
             return httpx.Response(200, json={"name": "Robo Cat", "description": "AI agent cat",
                                              "website": "https://robocat.example"})
-        if "robocat.example" in u:
-            return httpx.Response(200, text=f"<html><title>Robo Cat $RCAT</title><body>CA: {MINT} "
+        if "robocat.example" in u and "rdap.org" not in u:
+            site_ca = o.get("site_ca") or MINT
+            return httpx.Response(200, text=f"<html><title>Robo Cat $RCAT</title><body>CA: {site_ca} "
                                              '<a href="https://x.com/robocatsol">X</a> <a href="https://t.me/robocatsol">TG</a>'
                                              '<a href="https://github.com/robocat/agent">Code</a> <a href="https://docs.robocat.example">Docs</a>'
                                              " Our team. Roadmap. " + "word " * 200 + "</body></html>")
@@ -235,8 +236,16 @@ class Fake:
                 d["parent"] = {"full_name": "famous/ai-agent"}
             return httpx.Response(200, json=d)
         if "rdap.org" in u:
-            return httpx.Response(200, json={"events": [{"eventAction": "registration",
-                                                         "eventDate": "2026-10-30T10:00:00Z"}]})
+            date = "2024-03-01T10:00:00Z" if o.get("old_domain") else \
+                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(NOW - 86400)) if o.get("new_domain") else "2026-10-30T10:00:00Z"
+            return httpx.Response(200, json={"events": [{"eventAction": "registration", "eventDate": date}]})
+        if "cdn.syndication.twimg.com/tweet-result" in u:
+            return httpx.Response(200, json={
+                "text": f"$RCAT is live! CA: {MINT} https://t.co/abc", "created_at": "2026-11-01T12:00:00.000Z",
+                "entities": {"urls": [{"expanded_url": "https://robocat.example"}]},
+                "user": {"screen_name": "robocatsol", "name": "Robo Cat", "is_blue_verified": False}})
+        if "syndication.twitter.com/srv/timeline-profile" in u:
+            return httpx.Response(404, text="")
         if "publish.twitter.com" in u:
             return httpx.Response(200, json={"author_name": "Robo Cat", "html": "<blockquote>timeline</blockquote>"})
         if "t.me/" in u:

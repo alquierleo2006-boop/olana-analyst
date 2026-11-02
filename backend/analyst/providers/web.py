@@ -70,6 +70,31 @@ def classify_link(url: str) -> tuple[str, dict]:
     return "website", {"url": u, "domain": host}
 
 
+def _js_base36(x: float) -> str:
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    ip, fp = int(x), x - int(x)
+    out = "0" if ip == 0 else ""
+    while ip > 0:
+        out = digits[ip % 36] + out
+        ip //= 36
+    if fp > 0:
+        out += "."
+        for _ in range(20):
+            fp *= 36
+            d = int(fp)
+            out += digits[d]
+            fp -= d
+            if fp <= 0:
+                break
+    return out
+
+
+def tweet_embed_token(tweet_id: str) -> str:
+    """Jeton attendu par l'endpoint public d'intégration des tweets (même calcul que le widget officiel)."""
+    import math
+    return re.sub(r"(0+|\.)", "", _js_base36((int(tweet_id) / 1e15) * math.pi))
+
+
 class Web:
     def __init__(self, http: Http) -> None:
         self.http = http
@@ -109,6 +134,67 @@ class Web:
             if exc.status == 404:
                 return {"not_found": True}
             raise
+
+    async def x_tweet(self, tweet_id: str) -> dict | None:
+        """Tweet via l'endpoint public d'intégration (celui des tweets intégrés sur les sites) : texte, liens
+        complets, date, auteur. Aucune connexion ni contournement."""
+        try:
+            d = await self.http.get_json("x_oembed", "https://cdn.syndication.twimg.com/tweet-result",
+                                         params={"id": tweet_id, "token": tweet_embed_token(tweet_id), "lang": "fr"},
+                                         timeout=6)
+        except ProviderError:
+            return None
+        if not isinstance(d, dict) or not d.get("text"):
+            return None
+        user = d.get("user") or {}
+        urls = [u.get("expanded_url") for u in ((d.get("entities") or {}).get("urls") or []) if u.get("expanded_url")]
+        return {"text": d.get("text"), "created_at": d.get("created_at"), "urls": urls,
+                "author": user.get("screen_name"), "author_name": user.get("name"),
+                "author_verified": bool(user.get("is_blue_verified") or user.get("verified")),
+                "source": "endpoint public d'intégration de X"}
+
+    async def x_profile(self, handle: str) -> dict | None:
+        """Profil via l'endpoint public d'intégration de timeline. X le restreint souvent : None si indisponible."""
+        try:
+            body = await self.http.get_text("x_oembed",
+                                            f"https://syndication.twitter.com/srv/timeline-profile/screen-name/{handle}",
+                                            timeout=6)
+        except ProviderError:
+            return None
+        m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', body, re.S)
+        if not m:
+            return None
+        import json as _json
+        try:
+            data = _json.loads(m.group(1))
+        except ValueError:
+            return None
+        entries = (((data.get("props") or {}).get("pageProps") or {}).get("timeline") or {}).get("entries") or []
+        tweets, user = [], {}
+        for e in entries:
+            t = ((e.get("content") or {}).get("tweet")) or {}
+            if not t:
+                continue
+            user = user or (t.get("user") or {})
+            urls = [u.get("expanded_url") for u in ((t.get("entities") or {}).get("urls") or []) if u.get("expanded_url")]
+            tweets.append({"text": t.get("full_text") or t.get("text") or "", "created_at": t.get("created_at"), "urls": urls})
+        if not tweets and not user:
+            return None
+        bio_urls = [u.get("expanded_url") for u in (((user.get("entities") or {}).get("url") or {}).get("urls") or [])
+                    if u.get("expanded_url")]
+        bio_urls += [u.get("expanded_url") for u in (((user.get("entities") or {}).get("description") or {}).get("urls") or [])
+                     if u.get("expanded_url")]
+        return {"handle": user.get("screen_name") or handle, "name": user.get("name"), "bio": user.get("description"),
+                "followers": user.get("followers_count"), "created_at": user.get("created_at"),
+                "bio_urls": bio_urls, "tweets": tweets[:20], "source": "endpoint public d'intégration de X"}
+
+    async def resolve_url(self, url: str) -> str:
+        """Résout un lien raccourci (t.co…) sans télécharger la page."""
+        try:
+            r = await self.http.request("website", "HEAD", url, timeout=5, retries=0)
+            return str(r.url)
+        except Exception:
+            return url
 
     async def telegram_public(self, name: str) -> dict:
         body = await self.http.get_text("telegram_public", f"https://t.me/{name}", timeout=5)

@@ -65,6 +65,12 @@ Performance (backtesting), Paramètres.
 | Plan par défaut | +40 % / −20 % · 0,25 SOL | +50 % / −25 % · 0,25 SOL |
 | Rejeu des résultats | 1 h | 6 h |
 
+**Vérification depuis X (édition tech)** : sur l'accueil, colle le lien d'un tweet (idéalement celui qui annonce le CA)
+ou d'un profil → l'app lit le tweet (endpoints publics d'intégration de X), trouve le CA et le vérifie on-chain,
+trouve le site du projet, contrôle qu'il renvoie vers ce compte X, qu'il affiche le même CA, l'âge du domaine et la
+documentation, puis compare avec le CA saisi → **CLEAN / À VÉRIFIER / SUSPECT** et lance l'analyse complète du CA.
+La lecture des profils X est souvent restreinte par X : un lien de tweet est plus fiable.
+
 Les deux s'installent côte à côte (identifiants, historiques et pages Performance séparés) ; la clé Helius est partagée.
 Édition tech — **Originalité** : homonymes (un token plus ancien et bien plus gros au même nom = copycat → bloquant),
 tokens Solana au concept similaire lancés dans la semaine, projets GitHub établis faisant la même chose, marque connue
@@ -138,7 +144,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 39 tests (dont 3 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 47 tests (dont 3 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

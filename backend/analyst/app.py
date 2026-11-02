@@ -52,6 +52,12 @@ class LiveIn(BaseModel):
     below: float | None = None
 
 
+class XCheckIn(BaseModel):
+    url: str = Field(..., max_length=300)
+    mint: str | None = Field(None, max_length=64)
+    analyze: bool = True
+
+
 class SecretIn(BaseModel):
     value: str | None = Field(None, max_length=500)
 
@@ -188,6 +194,19 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
                 await ws.close()
             except Exception:
                 pass
+
+    @app.post("/api/xcheck", dependencies=A)
+    async def xcheck(body: XCheckIn):
+        from .engines.xcheck import run_xcheck
+        mint = (body.mint or "").strip() or None
+        if mint and not is_valid_mint_format(mint):
+            raise HTTPException(400, "CA invalide")
+        res = await run_xcheck(st.svc, body.url.strip(), mint)
+        if res.get("error"):
+            raise HTTPException(400, res["error"])
+        if body.analyze and res.get("ca"):
+            res["analysis_id"] = st.analyzer.start(res["ca"]).id
+        return res
 
     @app.get("/api/history", dependencies=A)
     async def history(limit: int = 200, launchpad: str | None = None, verdict: str | None = None,
