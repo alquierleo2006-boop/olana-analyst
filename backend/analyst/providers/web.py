@@ -11,13 +11,30 @@ from __future__ import annotations
 
 import html as htmllib
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from ..http import Http, ProviderError
 
 HREF_RE = re.compile(r"""href\s*=\s*["']([^"'#][^"']*)["']""", re.I)
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 META_DESC_RE = re.compile(r"""<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)""", re.I)
+OG_DESC_RE = re.compile(r"""<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)""", re.I)
+SCRIPT_SRC_RE = re.compile(r"""<script[^>]+src=["']([^"']+\.js[^"']*)["']""", re.I)
+URL_RE = re.compile(r"""https?://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:/[^\s"'<>\\)]*)?""")
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/130.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+}
+
+
+class SiteUnreadable(Exception):
+    def __init__(self, reason: str, status: int | None = None):
+        super().__init__(reason)
+        self.reason, self.status = reason, status
+
+
 TAG_RE = re.compile(r"<script.*?</script>|<style.*?</style>|<[^>]+>", re.I | re.S)
 
 
@@ -99,21 +116,60 @@ class Web:
     def __init__(self, http: Http) -> None:
         self.http = http
 
-    async def fetch_site(self, url: str) -> dict:
+    async def fetch_site(self, url: str, timeout: float = 9) -> dict:
+        """Télécharge un site comme un navigateur ordinaire (sans exécuter de JavaScript ni contourner de captcha).
+        Pour les sites en JavaScript (React, Next…), les principaux fichiers JS du même domaine sont aussi lus pour
+        y trouver le CA et les liens. Lève SiteUnreadable avec une raison compréhensible en cas d'échec."""
         if "://" not in url:
             url = "https://" + url
-        r = await self.http.request("website", "GET", url, timeout=5, max_bytes=1_500_000, retries=0,
-                                    headers={"Accept": "text/html"})
-        body = r.text[:1_500_000]
+        try:
+            r = await self.http.request("website", "GET", url, timeout=timeout, max_bytes=3_000_000, retries=1,
+                                        headers=BROWSER_HEADERS)
+        except ProviderError as exc:
+            st = exc.status
+            if st in (401, 403, 429, 503):
+                raise SiteUnreadable("protégé contre les robots (Cloudflare ou équivalent)", st) from exc
+            if st == 404:
+                raise SiteUnreadable("page introuvable (erreur 404)", st) from exc
+            if st:
+                raise SiteUnreadable(f"erreur HTTP {st}", st) from exc
+            msg = str(exc).lower()
+            if "timeout" in msg:
+                raise SiteUnreadable("le site ne répond pas (délai dépassé)") from exc
+            raise SiteUnreadable("site injoignable (adresse inexistante ou hors ligne)") from exc
+        body = r.text[:3_000_000]
+        low = body.lower()
+        if any(k in low for k in ("cf-chl-", "challenge-platform", "just a moment...", "attention required! | cloudflare")):
+            raise SiteUnreadable("protégé contre les robots (page de vérification Cloudflare)", r.status_code)
         title = TITLE_RE.search(body)
-        desc = META_DESC_RE.search(body)
+        desc = META_DESC_RE.search(body) or OG_DESC_RE.search(body)
         text = htmllib.unescape(TAG_RE.sub(" ", body))
         text = re.sub(r"\s+", " ", text).strip()
-        links = sorted({htmllib.unescape(h) for h in HREF_RE.findall(body)})
+        links = {htmllib.unescape(h) for h in HREF_RE.findall(body)}
+        links |= {u.rstrip("\\/.,;)") for u in URL_RE.findall(body)}  # liens présents dans le JSON / JS intégré
+        raw = body
+        js_read = 0
+        if len(text.split()) < 300:
+            # Site en JavaScript : lecture de quelques fichiers JS du même domaine (CA, liens sociaux, textes).
+            base = str(r.url)
+            host = (urlparse(base).hostname or "").lower()
+            srcs = [urljoin(base, s_) for s_ in SCRIPT_SRC_RE.findall(body)]
+            srcs = [s_ for s_ in srcs if (urlparse(s_).hostname or "").lower() == host][:4]
+            for js in srcs:
+                try:
+                    jr = await self.http.request("website", "GET", js, timeout=6, max_bytes=4_000_000, retries=0,
+                                                 headers={**BROWSER_HEADERS, "Accept": "*/*"})
+                except ProviderError:
+                    continue
+                js_read += 1
+                raw += "\n" + jr.text[:4_000_000]
+                links |= {u.rstrip("\\/.,;)") for u in URL_RE.findall(jr.text)}
         return {"final_url": str(r.url), "status": r.status_code,
                 "title": htmllib.unescape(title.group(1).strip())[:200] if title else None,
                 "description": htmllib.unescape(desc.group(1))[:500] if desc else None,
-                "text": text[:20000], "links": links[:400], "https": str(r.url).startswith("https://")}
+                "text": text[:20000], "raw": raw[:6_000_000], "links": sorted(links)[:600],
+                "https": str(r.url).startswith("https://"), "js_files_read": js_read,
+                "javascript_site": len(text.split()) < 300}
 
     async def domain_registration(self, domain: str) -> dict | None:
         try:

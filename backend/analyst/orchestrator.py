@@ -16,7 +16,7 @@ from .engines.narratives import run_narrative
 # Logiciel 100 % scalp : pas de fact-checking ni d'analyse de site (lents, poids nul en scalp).
 LEVEL1 = ["launchpad", "market", "security", "holders", "liquidity"]
 LEVEL2 = ["developer", "social", "clusters", "narrative", "smart_money", "momentum"]
-TIMEOUTS = {1: 15, 2: 30, 3: 35}
+TIMEOUTS = {1: 15, 2: 30, 3: 60}
 FIRST_RESULT_TARGET_S = {"memecoin": 5, "projet": 15, "hybride": 15}
 SCALP_FIRST_RESULT_S = 3
 

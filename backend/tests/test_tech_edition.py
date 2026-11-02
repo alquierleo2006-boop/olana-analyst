@@ -97,3 +97,20 @@ def test_site_not_declared_by_token_is_flagged():
     r, _, _ = _run(Fake(old_domain=True), site="https://other.example")
     sc = _check(r, "Site ↔ CA")
     assert sc["status"] == "attention" and "autre site" in sc["detail"], sc
+
+
+def test_blocked_site_is_explained_not_called_missing():
+    from .fakes import Fake
+    r, _, _ = _run(Fake(old_domain=True), site="https://blocked.example")
+    sd = _check(r, "Site & documentation")
+    assert "aucun site officiel" not in sd["detail"] and "protégé contre les robots" in sd["detail"], sd
+    assert sd["status"] == "attention"
+    sc = _check(r, "Site ↔ CA")
+    assert sc["status"] == "attention" and "protégé contre les robots" in sc["detail"], sc
+
+
+def test_javascript_site_with_ca_in_bundle():
+    from .fakes import Fake
+    r, _, _ = _run(Fake(old_domain=True), site="spa.example")
+    sc = _check(r, "Site ↔ CA")
+    assert "affiche bien ce CA" in sc["detail"], sc

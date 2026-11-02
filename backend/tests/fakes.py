@@ -224,6 +224,17 @@ class Fake:
         if "ipfs.io" in u:
             return httpx.Response(200, json={"name": "Robo Cat", "description": "AI agent cat",
                                              "website": "https://robocat.example"})
+        if "blocked.example" in u and "rdap.org" not in u:
+            return httpx.Response(403, text="Forbidden")
+        if "challenge.example" in u and "rdap.org" not in u:
+            return httpx.Response(200, text="<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x.js'></script></html>")
+        if "dead.example" in u and "rdap.org" not in u:
+            raise httpx.ConnectError("Name or service not known")
+        if "spa.example/assets/app.js" in u:
+            return httpx.Response(200, text='const cfg={ca:"' + MINT + '",x:"https://x.com/robocatsol",gh:"https://github.com/robocat/agent"};')
+        if "spa.example" in u and "rdap.org" not in u:
+            return httpx.Response(200, text='<html><head><title>Robo Cat</title><meta property="og:description" content="Autonomous AI agent cat">'
+                                            '</head><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>')
         if "other.example" in u and "rdap.org" not in u:
             return httpx.Response(200, text=f"<html><title>Robo Cat official</title><body>CA {MINT} "
                                              '<a href="https://docs.other.example">Docs</a>' + " word" * 200 + "</body></html>")

@@ -85,8 +85,16 @@ async def run_social(ctx) -> None:
     site_info: dict = {}
 
     async def verify(acc):
+        from ..providers.web import SiteUnreadable
         try:
-            return await asyncio.wait_for(_verify(svc, acc, ctx.mint, name, symbol, site_info), 8)
+            return await asyncio.wait_for(_verify(svc, acc, ctx.mint, name, symbol, site_info), 25)
+        except SiteUnreadable as exc:
+            acc.update(status=NOT_VERIFIED, unreadable=exc.reason, reasons=[f"site illisible : {exc.reason}"])
+            return acc
+        except asyncio.TimeoutError:
+            acc.update(status=NOT_VERIFIED, unreadable="le site met trop de temps à répondre",
+                       reasons=["site illisible : le site met trop de temps à répondre"])
+            return acc
         except Exception as exc:
             acc.update(status=NOT_VERIFIED, reasons=[f"vérification impossible : {type(exc).__name__}"])
             return acc
@@ -149,7 +157,10 @@ async def _verify(svc, a: dict, mint: str, name: str, symbol: str, site_info: di
         dom = domain_of(site["final_url"]) or a.get("domain")
         reg = await svc.web.domain_registration(dom) if dom else None
         a.update(title=site.get("title"), final_url=site["final_url"], domain=dom, https=site["https"])
-        mentions_mint = mint in site["text"] or any(mint in l for l in site["links"])
+        mentions_mint = mint in site.get("raw", site["text"]) or any(mint in l for l in site["links"])
+        if site.get("javascript_site"):
+            reasons.append("site en JavaScript : contenu lu via ses fichiers JS" if site.get("js_files_read")
+                           else "site en JavaScript : contenu peu lisible sans navigateur")
         a["mentions_mint"] = mentions_mint
         if reg and reg.get("registration"):
             a["domain_registered"] = reg["registration"]
@@ -165,9 +176,12 @@ async def _verify(svc, a: dict, mint: str, name: str, symbol: str, site_info: di
         if any(x in low for x in ("lorem ipsum", "coming soon", "under construction")):
             reasons.append("contenu de remplissage détecté (lorem ipsum / coming soon)")
         from .xcheck import find_cas
-        a["cas"] = find_cas(site["text"] + " " + " ".join(site["links"]))
+        a["cas"] = [c for c in find_cas(site.get("raw", site["text"]) + " " + " ".join(site["links"]))
+                    if c == mint or c in site["text"] or len(c) >= 43][:5]
         if not site_info.get("text") or a.get("user_provided"):
-            site_info.update(text=site["text"], links=site["links"], domain=dom, title=site.get("title"),
+            site_info.update(text=site["text"] if len(site["text"].split()) >= 300 else
+                             (site["text"] + " " + (site.get("description") or "")), links=site["links"], domain=dom,
+                             title=site.get("title"), javascript_site=site.get("javascript_site"),
                              description=site.get("description"), domain_age_days=a.get("domain_age_days"),
                              user_provided=bool(a.get("user_provided")))
         if mentions_mint:
@@ -309,9 +323,17 @@ def social_score(by_platform: dict) -> dict:
 async def run_project(ctx) -> None:
     svc = ctx.svc
     P = ctx.section("project")
-    site = await ctx.need("site", timeout=12) or {}
-    social = await ctx.need("social", timeout=2) or {}
-    if not site.get("text"):
+    site = await ctx.need("site", timeout=30) or {}
+    social = await ctx.need("social", timeout=30) or {}
+    if not site.get("text") and not site.get("links"):
+        unread = next((a for a in ((social.get("accounts") or {}).get("website") or []) if a.get("unreadable")), None)
+        if unread:
+            ctx.provide("github", None)
+            P["has_site"] = None
+            P["unreadable"] = unread["unreadable"]
+            P["score"] = {"score": None, "confidence": 0, "reasons": [f"site illisible : {unread['unreadable']}"],
+                          "status": ESTIMATED}
+            return
         ctx.provide("github", None)
         P["has_site"] = False
         P["score"] = {"score": 1.5, "confidence": 0.6, "reasons": ["aucun site web analysable"], "status": ESTIMATED}
@@ -421,7 +443,7 @@ STOP_ENTITIES = {"The", "We", "Our", "This", "Token", "Official", "Partner", "Pa
 async def run_factcheck(ctx) -> None:
     svc = ctx.svc
     F = ctx.section("factcheck")
-    site = await ctx.need("site", timeout=12) or {}
+    site = await ctx.need("site", timeout=30) or {}
     tok = ctx.result.get("token", {})
     desc = ((tok.get("description") or {}).get("v")) or ""
     name, symbol = tok.get("name") or "", tok.get("symbol") or ""

@@ -37,8 +37,17 @@ def checklist(r: dict, settings: dict) -> dict:
     # Site, documentation, domaine
     webs = [a for a in ((r.get("social") or {}).get("accounts") or {}).get("website", []) if a.get("final_url")]
     site = next((a for a in webs if a.get("user_provided")), None) or (webs[0] if webs else None)
+    unread = next((a for a in ((r.get("social") or {}).get("accounts") or {}).get("website", []) if a.get("unreadable")), None)
+    user_acc = next((a for a in ((r.get("social") or {}).get("accounts") or {}).get("website", []) if a.get("user_provided")), None)
+    if user_acc and user_acc.get("unreadable"):
+        unread, site = user_acc, None  # le site que tu as fourni prime : on dit clairement qu'il n'a pas pu être lu
     if pending("project") or pending("social"):
         checks.append(_c("Site & documentation", WAIT, "analyse du site en cours"))
+    elif not site and unread:
+        dead = any(k in unread["unreadable"] for k in ("injoignable", "404"))
+        checks.append(_c("Site & documentation", BAD if dead else WARN,
+                         f"site {unread.get('url', '').replace('https://', '')} illisible : {unread['unreadable']}"
+                         + ("" if dead else " — vérifie-le toi-même dans ton navigateur")))
     elif P.get("has_site") is False or not site:
         checks.append(_c("Site & documentation", BAD, "aucun site officiel : rare pour un vrai projet tech"))
     else:
@@ -66,7 +75,10 @@ def checklist(r: dict, settings: dict) -> dict:
         if pending("social"):
             checks.append(_c("Site ↔ CA", WAIT, "comparaison du site et du CA en cours"))
         elif not acc or not acc.get("final_url"):
-            checks.append(_c("Site ↔ CA", BAD, "le site fourni est injoignable"))
+            why = (acc or {}).get("unreadable") or "site injoignable"
+            dead = any(k in why for k in ("injoignable", "404"))
+            checks.append(_c("Site ↔ CA", BAD if dead else WARN, f"le site fourni n'a pas pu être lu : {why}"
+                             + ("" if dead else " — impossible de vérifier qu'il affiche ce CA")))
         else:
             cas = acc.get("cas") or []
             from ..providers.web import domain_of, registrable_domain

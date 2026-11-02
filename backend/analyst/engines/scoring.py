@@ -192,6 +192,8 @@ def score_from_section(r: dict, key: str) -> dict:
 
 def score_credibility(r: dict) -> dict:
     proj = (r.get("project") or {}).get("score")
+    if proj and proj.get("score") is None:
+        proj = None  # site illisible : pas de note de crédibilité inventée
     fc = (r.get("factcheck") or {}).get("claims") or []
     if not proj and not fc:
         return _s(None, 0, ["en attente"])

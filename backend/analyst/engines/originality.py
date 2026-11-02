@@ -43,7 +43,7 @@ def keywords(*texts: str, exclude: set[str] = frozenset(), n: int = 3) -> list[s
 async def run_originality(ctx) -> None:
     svc = ctx.svc
     O = ctx.section("originality")
-    gh = await ctx.need("github", timeout=15)
+    gh = await ctx.need("github", timeout=35)
     await ctx.need("site", timeout=5)
     tok = ctx.result.get("token") or {}
     name, symbol = tok.get("name") or "", tok.get("symbol") or ""
