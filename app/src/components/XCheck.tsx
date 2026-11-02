@@ -16,7 +16,8 @@ export default function XCheck({ mintInput, openAnalysis }: { mintInput: string;
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!/^(https?:\/\/)?(www\.|mobile\.)?(x|twitter)\.com\/.+/i.test(url.trim())) { setErr("Colle un lien X : x.com/compte ou x.com/compte/status/…"); return; }
+    const u = url.trim();
+    if (!/^(https?:\/\/)?(www\.|mobile\.)?(x|twitter)\.com\/.+/i.test(u) && !/^@?[A-Za-z0-9_]{1,15}$/.test(u)) { setErr("Colle un lien X (x.com/compte ou x.com/compte/status/…) ou @pseudo"); return; }
     const m = extractMint(mintInput);
     setBusy(true); setErr(null); setR(null);
     try {
@@ -30,7 +31,7 @@ export default function XCheck({ mintInput, openAnalysis }: { mintInput: string;
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-line bg-panel px-2.5 py-2 focus-within:border-[#9085e9]/60">
           <span className="text-[13px] text-muted">𝕏</span>
           <input value={url} onChange={(e) => { setUrl(e.target.value); setErr(null); }} spellCheck={false} aria-label="Lien X du projet"
-            placeholder="Lien X / Twitter du projet (tweet du CA ou profil)…" className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted" />
+            placeholder="Lien X du projet, profil ou tweet du CA, ou @pseudo…" className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted" />
           <button type="button" onClick={async () => setUrl((await readClipboard()).trim())} className="text-[11px] font-semibold text-muted hover:text-ink">Coller</button>
         </div>
         <Button type="submit" disabled={busy || !url.trim()} className="border-[#9085e9]/60 text-[#b3abf2]">{busy ? <Spinner /> : "VÉRIFIER"}</Button>
@@ -47,6 +48,15 @@ export default function XCheck({ mintInput, openAnalysis }: { mintInput: string;
             return <div key={c.name} className="flex gap-2 border-b border-line/60 py-1 text-[12px] last:border-0"><span className={`w-3 shrink-0 text-center font-bold ${cls}`}>{i}</span><span><b>{c.name}</b> <span className="text-muted">— {c.detail}</span></span></div>;
           })}
           {r.site && <div className="mt-1.5 text-[12px]">Site : <Link href={r.site.url}>{r.site.url}</Link></div>}
+          {r.declared_tokens?.length > 1 && (
+            <div className="mt-1.5 text-[12px]">
+              <div className="text-warn">Tokens qui utilisent ce compte X :</div>
+              {r.declared_tokens.map((t: any, k: number) => (
+                <div key={t.mint} className="flex justify-between text-[11px]"><span>{k === 0 ? "★ " : ""}${t.symbol} <span className="font-mono text-muted">{short(t.mint, 6)}</span></span>
+                  <span className="text-muted">{k === 0 ? "le plus ancien (original probable)" : "copie probable"}</span></div>
+              ))}
+            </div>
+          )}
           {r.summary && <p className="mt-1.5 text-[12px] text-ink2">{r.summary}</p>}
           {r.limits?.length > 0 && <div className="mt-1.5 text-[11px] text-warn">{r.limits.map((l: string, k: number) => <div key={k}>• {l}</div>)}</div>}
           {r.ca && (

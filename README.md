@@ -69,7 +69,9 @@ Performance (backtesting), Paramètres.
 ou d'un profil → l'app lit le tweet (endpoints publics d'intégration de X), trouve le CA et le vérifie on-chain,
 trouve le site du projet, contrôle qu'il renvoie vers ce compte X, qu'il affiche le même CA, l'âge du domaine et la
 documentation, puis compare avec le CA saisi → **CLEAN / À VÉRIFIER / SUSPECT** et lance l'analyse complète du CA.
-La lecture des profils X est souvent restreinte par X : un lien de tweet est plus fiable.
+Avec un **lien de profil ou @pseudo** (profils X souvent illisibles gratuitement), le CA et le site sont retrouvés via
+les tokens qui déclarent ce compte X sur DexScreener ; si plusieurs tokens utilisent le même compte, le plus ancien est
+retenu comme original probable et les autres signalés comme copies.
 
 Les deux s'installent côte à côte (identifiants, historiques et pages Performance séparés) ; la clé Helius est partagée.
 Édition tech — **Originalité** : homonymes (un token plus ancien et bien plus gros au même nom = copycat → bloquant),
@@ -144,7 +146,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 47 tests (dont 3 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 50 tests (dont 3 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

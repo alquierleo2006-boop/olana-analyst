@@ -40,8 +40,43 @@ async def is_token_mint(svc, address: str) -> bool:
                 and isinstance(data, dict) and (data.get("parsed") or {}).get("type") == "mint")
 
 
+async def tokens_declaring_handle(svc, handle: str | None) -> list[dict]:
+    """Tokens Solana dont la fiche DexScreener déclare ce compte X (lien x.com/<handle>), du plus ancien au plus récent."""
+    if not handle:
+        return []
+    try:
+        pairs = await svc.dex.search(handle)
+    except Exception:
+        return []
+    found: dict[str, dict] = {}
+    for p in pairs:
+        info = p.get("info") or {}
+        socials = [s.get("url") for s in info.get("socials") or [] if s.get("url")]
+        hit = False
+        for u in socials:
+            plat, d = classify_link(u)
+            if plat == "x" and (d.get("handle") or "").lower() == handle.lower():
+                hit = True
+        if not hit:
+            continue
+        bt = p.get("baseToken") or {}
+        a = bt.get("address")
+        liq = (p.get("liquidity") or {}).get("usd") or 0
+        cur = found.get(a)
+        created = (p.get("pairCreatedAt") or 0) / 1000 or None
+        if not cur or liq > cur["liquidity"]:
+            found[a] = {"mint": a, "symbol": bt.get("symbol"), "name": bt.get("name"), "liquidity": liq,
+                        "mcap": p.get("marketCap") or p.get("fdv"), "created_at": created,
+                        "websites": [w.get("url") for w in info.get("websites") or [] if w.get("url")]}
+    return sorted(found.values(), key=lambda d: d["created_at"] or 9e18)
+
+
 async def run_xcheck(svc, url: str, mint_hint: str | None = None) -> dict:
     t0 = time.monotonic()
+    u = url.strip()
+    if re.fullmatch(r"@?[A-Za-z0-9_]{1,15}", u):  # « @pseudo » ou « pseudo » seul
+        u = "https://x.com/" + u.lstrip("@")
+    url = u
     plat, det = classify_link(url)
     if plat != "x" or det.get("kind") not in ("tweet", "profile"):
         return {"error": "Colle le lien d'un tweet (x.com/compte/status/…) ou d'un profil X (x.com/compte)."}
@@ -92,8 +127,16 @@ async def run_xcheck(svc, url: str, mint_hint: str | None = None) -> dict:
         if emb and emb.get("not_found"):
             out["checks"].append(_c("Compte / tweet X", BAD, "compte X introuvable (suspendu ou inexistant)"))
         else:
-            out["checks"].append(_c("Compte / tweet X", WARN, "le compte existe, mais son contenu n'est pas lisible gratuitement"))
-            out["limits"].append("X restreint la lecture des profils : colle plutôt le lien du tweet qui annonce le CA.")
+            out["checks"].append(_c("Compte / tweet X", INFO, "compte trouvé ; son contenu n'est pas lisible gratuitement "
+                                                            "(vérification via DexScreener et le site)"))
+            out["limits"].append("X restreint la lecture des profils : le CA et le site sont retrouvés via les tokens qui "
+                                 "déclarent ce compte sur DexScreener. Un lien de tweet du CA donne une vérification plus complète.")
+
+    # 1 bis. Tokens qui déclarent ce compte X comme réseau officiel (DexScreener) — fonctionne sans lire X.
+    declared = await tokens_declaring_handle(svc, out.get("handle"))
+    out["declared_tokens"] = declared
+    for d in declared[:3]:
+        urls += d.get("websites") or []
 
     # 2. CA publié
     cas_x = []
@@ -169,14 +212,38 @@ async def run_xcheck(svc, url: str, mint_hint: str | None = None) -> dict:
     elif site_ok and cas_x and not cas_site:
         out["checks"].append(_c("CA identique X ↔ site", WARN, "le site n'affiche pas de CA"))
     if mint_hint:
-        known = set(cas_x) | set(cas_site)
+        known = set(cas_x) | set(cas_site) | {d["mint"] for d in declared[:1]}
         if not known:
             out["checks"].append(_c("CA saisi", WARN, "impossible de confirmer ton CA : aucun CA trouvé sur X ni sur le site"))
         elif mint_hint in known:
             out["checks"].append(_c("CA saisi", OK, "ton CA correspond à celui publié par le projet"))
         else:
             out["checks"].append(_c("CA saisi", BAD, "ton CA NE correspond PAS à celui publié par le projet (faux token ?)"))
+    # Tokens déclarant ce compte X : un seul = cohérent ; plusieurs = copies probables.
+    dmints = [d["mint"] for d in declared]
+    if declared:
+        orig = declared[0]  # le plus ancien
+        if len(declared) == 1:
+            out["checks"].append(_c("Token lié à ce compte X", OK, f"${orig['symbol']} déclare ce compte X sur DexScreener"))
+        else:
+            out["checks"].append(_c("Token lié à ce compte X", WARN,
+                                    f"{len(declared)} tokens déclarent ce compte X : le plus ancien est ${orig['symbol']} "
+                                    f"({orig['mint'][:6]}…), les autres sont probablement des copies"))
+        if cas_x and not set(cas_x) & set(dmints):
+            out["checks"].append(_c("CA publié vs DexScreener", WARN,
+                                    "le CA publié sur X n'est pas encore relié à ce compte sur DexScreener"))
+        if cas_site and not set(cas_site) & set(dmints) and not cas_x:
+            out["checks"].append(_c("CA identique site ↔ DexScreener", BAD,
+                                    "le CA affiché sur le site est différent du token qui déclare ce compte X"))
+        elif cas_site and set(cas_site) & set(dmints) and not cas_x:
+            out["checks"].append(_c("CA identique site ↔ DexScreener", OK, "le site affiche bien le CA du token lié à ce compte"))
+    elif out.get("handle"):
+        out["checks"].append(_c("Token lié à ce compte X", WARN if not cas_x else INFO,
+                                "aucun token ne déclare ce compte X sur DexScreener"))
+    if mint_hint and declared and mint_hint not in dmints and not (set(cas_x) | set(cas_site)):
+        out["checks"].append(_c("CA saisi", BAD, "ton CA n'est pas le token qui déclare ce compte X (copie ?)"))
     out["ca"] = (cas_x[0] if len(cas_x) == 1 else None) or (mint_hint if mint_hint and await is_token_mint(svc, mint_hint) else None) \
+        or (declared[0]["mint"] if declared else None) \
         or (cas_site[0] if len(cas_site) == 1 and await is_token_mint(svc, cas_site[0]) else None)
     if not ref and not cas_site:
         out["limits"].append("Sans CA publié, l'outil ne peut pas relier ce compte X à un token.")

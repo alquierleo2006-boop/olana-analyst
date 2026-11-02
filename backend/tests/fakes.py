@@ -174,6 +174,14 @@ class Fake:
             extra = [{"chainId": "solana", "baseToken": {"address": "Orig111", "symbol": "RCAT", "name": "Robo Cat"},
                       "pairCreatedAt": (NOW - 40 * 86400) * 1000, "marketCap": 42_000_000, "volume": {"h24": 900000}}] \
                 if o.get("copycat") else []
+            if o.get("declared"):
+                decl = lambda addr, sym, age: {"chainId": "solana", "baseToken": {"address": addr, "symbol": sym, "name": "Robo Cat"},
+                                               "pairCreatedAt": (NOW - age) * 1000, "marketCap": 420000, "liquidity": {"usd": 61000},
+                                               "info": {"socials": [{"type": "twitter", "url": "https://x.com/RoboCatSol"}],
+                                                        "websites": [{"url": "https://robocat.example"}]}}
+                extra.append(decl(MINT, "RCAT", 6000))
+                if o.get("impostor"):
+                    extra.append(decl("Fake1111111111111111111111111111111111111111", "RCAT", 600))
             return httpx.Response(200, json={"pairs": extra + [
                 {"chainId": "solana", "baseToken": {"address": "Other111", "symbol": "RCAT", "name": "Robo Cat"},
                  "pairCreatedAt": (NOW - 3600) * 1000, "marketCap": 1000, "volume": {"h24": 10}},
