@@ -5,20 +5,22 @@ import { MINT_RE, extractMint } from "../lib/mint";
 import { readClipboard } from "../lib/native";
 import { Badge, Button, Tone } from "../components/ui";
 import { appFullName, isTech } from "../lib/edition";
-import XCheck from "../components/XCheck";
 
 export default function Home({ onAnalyze, go, health, input, setInput, error, setError, busy }:
-  { onAnalyze: (mint: string) => void; go: (p: string, arg?: any) => void; health: any; input: string; setInput: (s: string) => void;
+  { onAnalyze: (mint: string, site?: string) => void; go: (p: string, arg?: any) => void; health: any; input: string; setInput: (s: string) => void;
     error: string | null; setError: (s: string | null) => void; busy: boolean }) {
   const [recent, setRecent] = useState<any[]>([]);
+  const [site, setSite] = useState("");
   useEffect(() => { api("/api/history?limit=6").then(setRecent).catch(() => {}); }, []);
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     const m = extractMint(input);
     if (!m || !MINT_RE.test(m)) { setError("Adresse invalide : colle une adresse de token Solana (32 à 44 caractères base58)."); return; }
+    const st = site.trim();
+    if (isTech() && st && !/^(https?:\/\/)?[^\s/]+\.[^\s]{2,}/i.test(st)) { setError("Lien du site invalide (exemple : monprojet.xyz)."); return; }
     setError(null);
-    onAnalyze(m);
+    onAnalyze(m, isTech() && st ? st : undefined);
   };
   const paste = async () => { const t = await readClipboard(); setInput(t.trim()); setError(null); };
 
@@ -44,11 +46,17 @@ export default function Home({ onAnalyze, go, health, input, setInput, error, se
             className="min-w-0 flex-1 bg-transparent font-mono text-[12px] outline-none placeholder:font-sans placeholder:text-muted" aria-label="Adresse Mint" />
           <button type="button" onClick={paste} className="text-[11px] font-semibold text-muted hover:text-ink" title="Coller depuis le presse-papiers">Coller</button>
         </div>
+        {isTech() && (
+          <div className="flex items-center gap-2 rounded-lg border border-line bg-panel px-2.5 py-2 focus-within:border-[#9085e9]/60">
+            <span className="text-[12px] text-muted">🌐</span>
+            <input value={site} onChange={(e) => { setSite(e.target.value); setError(null); }} spellCheck={false} aria-label="Lien du site"
+              placeholder="Lien du site du projet (facultatif, analysé avec le CA)…" className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted" />
+            <button type="button" onClick={async () => setSite((await readClipboard()).trim())} className="text-[11px] font-semibold text-muted hover:text-ink">Coller</button>
+          </div>
+        )}
         {error && <div className="text-[12px] text-bad" role="alert">{error}</div>}
         <Button type="submit" kind="primary" className="w-full py-2.5 text-[14px] tracking-wider" disabled={busy || !input.trim()}>{busy ? "Analyse en cours…" : "ANALYSER"}</Button>
       </form>
-
-      {isTech() && <XCheck mintInput={input} openAnalysis={(id) => go("analysis", id)} />}
 
       <div className="grid grid-cols-2 gap-1.5">
         <Button onClick={() => go("history")}>Historique</Button>

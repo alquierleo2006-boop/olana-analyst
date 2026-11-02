@@ -65,13 +65,10 @@ Performance (backtesting), Paramètres.
 | Plan par défaut | +40 % / −20 % · 0,25 SOL | +50 % / −25 % · 0,25 SOL |
 | Rejeu des résultats | 1 h | 6 h |
 
-**Vérification depuis X (édition tech)** : sur l'accueil, colle le lien d'un tweet (idéalement celui qui annonce le CA)
-ou d'un profil → l'app lit le tweet (endpoints publics d'intégration de X), trouve le CA et le vérifie on-chain,
-trouve le site du projet, contrôle qu'il renvoie vers ce compte X, qu'il affiche le même CA, l'âge du domaine et la
-documentation, puis compare avec le CA saisi → **CLEAN / À VÉRIFIER / SUSPECT** et lance l'analyse complète du CA.
-Avec un **lien de profil ou @pseudo** (profils X souvent illisibles gratuitement), le CA et le site sont retrouvés via
-les tokens qui déclarent ce compte X sur DexScreener ; si plusieurs tokens utilisent le même compte, le plus ancien est
-retenu comme original probable et les autres signalés comme copies.
+**CA + lien du site (édition tech)** : sur l'accueil, colle le CA et, facultativement, le lien du site du projet.
+Une seule analyse traite les deux : le site fourni sert à l'analyse du projet (GitHub, documentation, affirmations,
+originalité) et la ligne **Site ↔ CA** de la checklist vérifie que le site affiche ce CA (bloquant s'il en affiche un autre)
+et que le token déclare bien ce site.
 
 Les deux s'installent côte à côte (identifiants, historiques et pages Performance séparés) ; la clé Helius est partagée.
 Édition tech — **Originalité** : homonymes (un token plus ancien et bien plus gros au même nom = copycat → bloquant),
@@ -146,7 +143,7 @@ de session aléatoire généré à chaque lancement.
 
 ## Tests
 ```bash
-cd backend && python -m pytest -q tests     # 50 tests (dont 3 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
+cd backend && python -m pytest -q tests     # 53 tests (dont 6 de l'édition tech) : analyse de bout en bout sur faux réseau, pannes, risques…
 cd app && npm run build                       # vérification TypeScript + build
 python -m tests.demo_server                   # (dans backend/) interface de démo sans Internet
 ```

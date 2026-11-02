@@ -35,7 +35,8 @@ def checklist(r: dict, settings: dict) -> dict:
         checks.append(_c("Produit réel (GitHub)", WARN, f"{g.get('repo')} inactif depuis plus de 30 jours"))
 
     # Site, documentation, domaine
-    site = next((a for a in ((r.get("social") or {}).get("accounts") or {}).get("website", []) if a.get("final_url")), None)
+    webs = [a for a in ((r.get("social") or {}).get("accounts") or {}).get("website", []) if a.get("final_url")]
+    site = next((a for a in webs if a.get("user_provided")), None) or (webs[0] if webs else None)
     if pending("project") or pending("social"):
         checks.append(_c("Site & documentation", WAIT, "analyse du site en cours"))
     elif P.get("has_site") is False or not site:
@@ -56,6 +57,40 @@ def checklist(r: dict, settings: dict) -> dict:
         elif st == OK:
             st = WARN; why.append("le site n'affiche pas l'adresse du token")
         checks.append(_c("Site & documentation", st, " · ".join(why)))
+
+    # Site fourni par l'utilisateur ↔ CA analysé
+    user_site = r.get("user_site")
+    if user_site:
+        acc = next((a for a in ((r.get("social") or {}).get("accounts") or {}).get("website", []) if a.get("user_provided")), None)
+        mint = r.get("mint")
+        if pending("social"):
+            checks.append(_c("Site ↔ CA", WAIT, "comparaison du site et du CA en cours"))
+        elif not acc or not acc.get("final_url"):
+            checks.append(_c("Site ↔ CA", BAD, "le site fourni est injoignable"))
+        else:
+            cas = acc.get("cas") or []
+            from ..providers.web import domain_of, registrable_domain
+            dom = registrable_domain(domain_of(acc["final_url"]) or "")
+            token_sites = [registrable_domain(domain_of(a.get("url") or "") or "")
+                           for a in ((r.get("social") or {}).get("accounts") or {}).get("website", [])
+                           if a.get("declared_by_token")]
+            parts, st = [], OK
+            if mint in cas:
+                parts.append("le site affiche bien ce CA")
+            elif cas:
+                parts.append(f"le site affiche un AUTRE CA ({cas[0][:6]}…{cas[0][-4:]})")
+                st = BAD
+            else:
+                parts.append("le site n'affiche aucun CA")
+                st = WARN
+            if dom and dom in token_sites:
+                parts.append("le token déclare ce même site")
+            elif token_sites:
+                parts.append(f"le token déclare un autre site ({token_sites[0]})")
+                st = BAD if st == BAD else WARN
+            else:
+                parts.append("le token ne déclare aucun site")
+            checks.append(_c("Site ↔ CA", st, " · ".join(parts)))
 
     # Affirmations vérifiées
     claims = F.get("claims") or []

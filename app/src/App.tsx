@@ -28,10 +28,10 @@ export default function App() {
   const settingsRef = useRef<any>(null);
   settingsRef.current = settings;
 
-  const analyze = useCallback(async (mint: string) => {
+  const analyze = useCallback(async (mint: string, site?: string) => {
     setBusy(true); setError(null);
     try {
-      const r = await api("/api/analyze", { method: "POST", body: JSON.stringify({ mint }) });
+      const r = await api("/api/analyze", { method: "POST", body: JSON.stringify({ mint, site: site || null }) });
       setAid(r.analysis_id); setPage("analysis");
     } catch (e: any) {
       setError(e.message); setPage("home");

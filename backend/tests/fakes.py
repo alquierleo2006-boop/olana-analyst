@@ -224,6 +224,9 @@ class Fake:
         if "ipfs.io" in u:
             return httpx.Response(200, json={"name": "Robo Cat", "description": "AI agent cat",
                                              "website": "https://robocat.example"})
+        if "other.example" in u and "rdap.org" not in u:
+            return httpx.Response(200, text=f"<html><title>Robo Cat official</title><body>CA {MINT} "
+                                             '<a href="https://docs.other.example">Docs</a>' + " word" * 200 + "</body></html>")
         if "robocat.example" in u and "rdap.org" not in u:
             site_ca = o.get("site_ca") or MINT
             return httpx.Response(200, text=f"<html><title>Robo Cat $RCAT</title><body>CA: {site_ca} "

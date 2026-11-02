@@ -6,7 +6,7 @@ import pytest
 pytestmark = pytest.mark.skipif(os.environ.get("ANALYST_EDITION") != "tech", reason="édition tech uniquement")
 
 
-def _run(fake):
+def _run(fake, site=None):
     from fastapi.testclient import TestClient
 
     from analyst.app import create_app
@@ -14,7 +14,9 @@ def _run(fake):
     app = create_app(transport=fake.transport(), db_path=":memory:", start_background=False)
     with TestClient(app) as c:
         c.portal.call(app.state.st.narratives.refresh)
-        aid = c.post("/api/analyze", json={"mint": MINT}).json()["analysis_id"]
+        resp = c.post("/api/analyze", json={"mint": MINT, "site": site})
+        assert resp.status_code == 200, resp.text
+        aid = resp.json()["analysis_id"]
         c.portal.call(app.state.st.analyzer.live[aid].done.wait)
         health = c.get("/api/health").json()
         return c.get(f"/api/analyses/{aid}").json(), health, c.get("/api/settings").json()["settings"]
@@ -66,3 +68,32 @@ def test_tech_fork_blocks_entry():
     assert gh["status"] == "bloquant" and "famous/ai-agent" in gh["detail"]
     assert r["scores"]["scalp"]["decision"] == "NE PAS ENTRER"
     assert r["scores"]["verdict"] == "AVOID"
+
+
+
+def _check(r, name):
+    return next(c for c in r["scores"]["scalp"]["checks"] if c["name"] == name)
+
+
+def test_site_and_ca_analysed_together():
+    from .fakes import Fake
+    r, _, _ = _run(Fake(old_domain=True), site="robocat.example")
+    assert r["user_site"] == "https://robocat.example"
+    sc = _check(r, "Site ↔ CA")
+    assert sc["status"] == "ok" and "affiche bien ce CA" in sc["detail"] and "même site" in sc["detail"], sc
+    assert r["project"]["has_site"] is True and r["project"]["github"]["repo"] == "robocat/agent"
+
+
+def test_site_showing_other_ca_blocks():
+    from .fakes import Fake
+    r, _, _ = _run(Fake(old_domain=True, site_ca="So11111111111111111111111111111111111111112"), site="https://robocat.example")
+    sc = _check(r, "Site ↔ CA")
+    assert sc["status"] == "bloquant" and "AUTRE CA" in sc["detail"]
+    assert r["scores"]["scalp"]["decision"] == "NE PAS ENTRER"
+
+
+def test_site_not_declared_by_token_is_flagged():
+    from .fakes import Fake
+    r, _, _ = _run(Fake(old_domain=True), site="https://other.example")
+    sc = _check(r, "Site ↔ CA")
+    assert sc["status"] == "attention" and "autre site" in sc["detail"], sc

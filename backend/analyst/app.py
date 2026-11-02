@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import os
 import secrets as pysecrets
 import time
@@ -40,6 +41,7 @@ ALLOWED_ORIGINS = ["tauri://localhost", "http://tauri.localhost", "https://tauri
 
 class AnalyzeIn(BaseModel):
     mint: str = Field(..., max_length=64)
+    site: str | None = Field(None, max_length=300)
 
 
 class WalletIn(BaseModel):
@@ -142,8 +144,15 @@ def create_app(transport=None, db_path=None, start_background: bool = True) -> F
         if not is_valid_mint_format(mint):
             raise HTTPException(400, "Adresse invalide : une adresse Solana fait 32 à 44 caractères base58 "
                                      "(sans 0, O, I ni l).")
-        an = st.analyzer.start(mint)
-        return {"analysis_id": an.id, "mint": mint}
+        site = (body.site or "").strip() or None
+        if site:
+            if "://" not in site:
+                site = "https://" + site
+            from .providers.web import domain_of
+            if not re.match(r"^https?://", site) or not domain_of(site) or "." not in (domain_of(site) or ""):
+                raise HTTPException(400, "Lien du site invalide (exemple : https://monprojet.xyz).")
+        an = st.analyzer.start(mint, site)
+        return {"analysis_id": an.id, "mint": mint, "site": site}
 
     @app.get("/api/analyses/{aid}", dependencies=A)
     async def get_analysis(aid: int):

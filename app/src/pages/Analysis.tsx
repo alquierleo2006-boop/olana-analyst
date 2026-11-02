@@ -15,7 +15,7 @@ const TABS = [
   { id: "ai", label: "AI VERDICT" },
 ];
 
-export default function Analysis({ id, compact, onBack, onReanalyze }: { id: number; compact: boolean; onBack: () => void; onReanalyze: (mint: string) => void }) {
+export default function Analysis({ id, compact, onBack, onReanalyze }: { id: number; compact: boolean; onBack: () => void; onReanalyze: (mint: string, site?: string) => void }) {
   const { data: d, error, firstMs } = useAnalysis(id);
   const [tab, setTab] = useState("overview");
   const [showDetails, setShowDetails] = useState(!compact);
@@ -45,7 +45,7 @@ export default function Analysis({ id, compact, onBack, onReanalyze }: { id: num
       <div className="flex items-center justify-between">
         <Button onClick={onBack}>← Accueil</Button>
         <div className="flex gap-1.5">
-          {!running && <Button onClick={() => onReanalyze(d.mint)} title="Relancer une analyse complète">↻ Réanalyser</Button>}
+          {!running && <Button onClick={() => onReanalyze(d.mint, d.user_site)} title="Relancer une analyse complète">↻ Réanalyser</Button>}
           <Button onClick={() => setShowDetails(!showDetails)}>{showDetails ? "Mode compact" : "Analyse détaillée"}</Button>
         </div>
       </div>
@@ -65,6 +65,7 @@ export default function Analysis({ id, compact, onBack, onReanalyze }: { id: num
             <button className="selectable mt-0.5 font-mono text-[11px] text-muted hover:text-ink2" onClick={() => copyText(d.mint)} title="Copier l'adresse">
               {short(d.mint, 8)} ⧉
             </button>
+            {d.user_site && <div className="text-[11px] text-muted">🌐 Site analysé : <span className="text-ink2">{d.user_site.replace(/^https?:\/\//, "")}</span></div>}
           </div>
         </div>
         <div className="mt-2.5 grid grid-cols-3 gap-2 sm:grid-cols-6">

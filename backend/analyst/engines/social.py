@@ -62,6 +62,9 @@ async def run_social(ctx) -> None:
         if source not in entry["declared_by"]:
             entry["declared_by"].append(source)
 
+    user_site = ctx.result.get("user_site")
+    if user_site:
+        add(user_site, "fourni par toi")
     for w in dex_info.get("websites") or []:
         add(w.get("url"), "DexScreener")
     for s in dex_info.get("socials") or []:
@@ -91,7 +94,14 @@ async def run_social(ctx) -> None:
     # Le site d'abord (ses liens servent à recouper les autres comptes).
     sites = [a for a in accounts if a["platform"] == "website"]
     others = [a for a in accounts if a["platform"] != "website"]
-    await asyncio.gather(*[verify(a) for a in sites])
+    # Le site fourni par l'utilisateur est analysé en premier : c'est lui qui sert à l'analyse du projet.
+    for a in sites:
+        a["user_provided"] = "fourni par toi" in a["declared_by"]
+        a["declared_by_token"] = [d for d in a["declared_by"] if d != "fourni par toi"]
+    user_first = [a for a in sites if a["user_provided"]]
+    if user_first:
+        await asyncio.gather(*[verify(a) for a in user_first])
+    await asyncio.gather(*[verify(a) for a in sites if not a["user_provided"]])
     await asyncio.gather(*[verify(a) for a in others])
 
     # Liens réutilisés par d'autres tokens déjà analysés : signal de copie.
@@ -154,8 +164,12 @@ async def _verify(svc, a: dict, mint: str, name: str, symbol: str, site_info: di
         low = site["text"].lower()
         if any(x in low for x in ("lorem ipsum", "coming soon", "under construction")):
             reasons.append("contenu de remplissage détecté (lorem ipsum / coming soon)")
-        site_info.update(text=site["text"], links=site["links"], domain=dom, title=site.get("title"),
-                         description=site.get("description"), domain_age_days=a.get("domain_age_days"))
+        from .xcheck import find_cas
+        a["cas"] = find_cas(site["text"] + " " + " ".join(site["links"]))
+        if not site_info.get("text") or a.get("user_provided"):
+            site_info.update(text=site["text"], links=site["links"], domain=dom, title=site.get("title"),
+                             description=site.get("description"), domain_age_days=a.get("domain_age_days"),
+                             user_provided=bool(a.get("user_provided")))
         if mentions_mint:
             reasons.append("le site affiche l'adresse exacte du token (lien bidirectionnel)")
             a["status"] = AUTH_VERIFIED

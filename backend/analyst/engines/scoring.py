@@ -280,9 +280,9 @@ def compute(r: dict, settings: dict, final: bool = False) -> dict:
         scalp = checklist(r, settings)
         # En mode Scalp, la checklist d'entrée prime : un blocage interdit BUY SETUP.
         if scalp["decision"] == "NE PAS ENTRER" and verdict != "AVOID":
-            verdict, why = "AVOID", "checklist scalp : " + scalp["reason"]
+            verdict, why = "AVOID", "checklist : " + scalp["reason"]
         elif scalp["decision"] in ("ATTENDRE", "EN COURS") and verdict == "BUY SETUP":
-            verdict, why = "WATCH", "checklist scalp : " + scalp["reason"]
+            verdict, why = "WATCH", "checklist : " + scalp["reason"]
     interp = next(lbl for lim, lbl in INTERPRETATION if glob is not None and glob < lim) if glob is not None else "—"
     if glob is not None and confidence < th.get("min_confidence", 0.35):
         interp = "non qualifiable (confiance trop faible)" if final else "provisoire — en attente de données"

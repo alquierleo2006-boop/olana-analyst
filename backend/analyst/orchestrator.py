@@ -40,10 +40,12 @@ class Analyzer:
         self.svc, self.narratives, self.notifier, self.watcher = svc, narratives, notifier, live
         self.live: dict[int, Analysis] = {}
 
-    def start(self, mint: str) -> Analysis:
+    def start(self, mint: str, site: str | None = None) -> Analysis:
         aid = self.svc.db.execute("INSERT INTO token_analyses(mint, created_at, status) VALUES(?,?,?)",
                                   (mint, time.time(), "en cours"))
         an = Analysis(aid, mint)
+        if site:
+            an.result["user_site"] = site  # site fourni par l'utilisateur, analysé avec le CA
         self.live[aid] = an
         asyncio.create_task(self._run_safe(an))
         return an
